@@ -1,0 +1,9 @@
+.studio-brand { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
+.studio-brand-mark { display: block; object-fit: contain; width: 30px; height: 30px; flex-shrink: 0; }
+.studio-brand-copy { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.studio-brand-copy strong { font-size: 15px; font-weight: 650; letter-spacing: -.35px; white-space: nowrap; color: var(--text); }
+.studio-brand-copy small { font-size: 11px; color: var(--muted); }
+.studio-brand-copy .studio-brand-version { align-self: flex-start; padding: 2px 6px; border-radius: 5px; background: var(--hover); color: var(--muted); font-size: 10px; line-height: 1.3; font-weight: 500; letter-spacing: .15px; }
+.sidebar-brand > .studio-brand { flex: 1; }
+.welcome-mark .studio-brand-mark { width: 52px; height: 52px; border-radius: 0; box-shadow: none; }
+.studio-brand-mark-only { gap: 0; }

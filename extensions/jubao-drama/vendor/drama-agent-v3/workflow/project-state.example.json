@@ -1,0 +1,20 @@
+{
+  "_说明": "初始状态示例，不包含任何真实确认。content、approval及selection由项目资料与可信用户决定填充；不要让模型自行写成已确认。",
+  "core": {
+    "content": "",
+    "unresolved_conflict": false,
+    "approval": null
+  },
+  "plan": {
+    "content": "",
+    "core_hash": null,
+    "selection": null
+  },
+  "progress": {
+    "current_module": "M0",
+    "accepted_outline_episodes": [],
+    "accepted_script_episodes": [],
+    "delivered_files": [],
+    "unresolved_review_items": []
+  }
+}

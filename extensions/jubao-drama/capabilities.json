@@ -1,0 +1,66 @@
+[
+  {
+    "id": "gm3-1",
+    "kind": "agent",
+    "skill": "jubao-agent-gm3-1",
+    "display_name": "巨豹 Agent1-适配巨豹满血版 V1.1",
+    "label": "巨豹 Agent1 · 适配满血版 V1.1",
+    "aliases": "满血版 v1.1 gm gm3 gm3.1",
+    "description": "端到端中文剧本创作总控规则。",
+    "legacy_names": [
+      "巨豹 Agent-适配 GM3.1 版本",
+      "巨豹 Agent-适配巨豹满血版 V1.1"
+    ]
+  },
+  {
+    "id": "oa6-1",
+    "kind": "agent",
+    "skill": "jubao-agent-oa6-1",
+    "display_name": "巨豹 Agent2-适配巨豹测试版 V2.1",
+    "label": "巨豹 Agent2 · 适配测试版 V2.1",
+    "aliases": "测试版 v2.1 oa6 oa6.1",
+    "description": "原项目剧本创作、审稿和导出规则。",
+    "legacy_names": [
+      "巨豹 Agent-适配 OA6.1 版本",
+      "巨豹 Agent-适配巨豹测试版 V2.1"
+    ]
+  },
+  {
+    "id": "gr4-7",
+    "kind": "agent",
+    "skill": "jubao-agent-gr4-7",
+    "display_name": "巨豹 Agent3-适配巨豹试用版 V3.0",
+    "label": "巨豹 Agent3 · 适配试用版 V3.0",
+    "aliases": "试用版 v3.0 gr gr4 gr4.7",
+    "description": "全格式影视编剧规则。",
+    "legacy_names": [
+      "巨豹 Agent-适配 GR4.7 版本",
+      "巨豹 Agent-适配巨豹试用版 V3.0"
+    ]
+  },
+  {
+    "id": "outline-script",
+    "kind": "skill",
+    "skill": "jubao-skill-outline-script",
+    "display_name": "巨豹skill-大纲变剧本",
+    "label": "skill-大纲变剧本",
+    "aliases": "大纲 编剧 扩写 outline",
+    "description": "将已有大纲扩写为分集剧本，可单独使用或叠加到一个主 Agent。",
+    "legacy_names": [
+      "巨豹大纲变剧本",
+      "巨豹 skill-大纲变剧本"
+    ]
+  },
+  {
+    "id": "humanize",
+    "kind": "skill",
+    "skill": "jubao-skill-humanize",
+    "display_name": "巨豹skill-去AI味",
+    "label": "skill-去 AI 味",
+    "aliases": "去AI味 去ai味 润色 humanize",
+    "description": "按剧本场景优化台词和描写，保留剧情、人物声音与格式，可叠加使用。",
+    "legacy_names": [
+      "巨豹去 AI 味"
+    ]
+  }
+]

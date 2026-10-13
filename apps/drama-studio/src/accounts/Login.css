@@ -1,0 +1,58 @@
+.studio-login {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 28px;
+  padding: max(28px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: var(--sidebar);
+  color: var(--text);
+}
+.studio-login > :not(.login-backdrop) { position: relative; z-index: 1; }
+.login-brand { width: min(1120px, 100%); margin: 0 auto; }
+.login-brand .studio-brand { gap: 11px; }
+.login-brand .studio-brand-mark { width: 36px; height: 36px; }
+.login-brand .studio-brand-copy small { letter-spacing: .5px; }
+.login-card {
+  width: min(380px, 100%);
+  align-self: center;
+  justify-self: center;
+  margin: 6px 0;
+  padding: 28px 30px 24px;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px -28px #49376f24, 0 2px 6px #49376f03;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.login-icon { width: 42px; height: 42px; margin: 0 auto 16px; display: grid; place-items: center; }
+.login-icon img { display: block; width: 42px; height: 42px; object-fit: contain; }
+.login-card h1 { margin: 0; font-size: 22px; line-height: 1.4; font-weight: 650; letter-spacing: -.6px; text-align: center; text-wrap: balance; }
+.login-description { margin: 8px 0 22px; font-size: 12px; line-height: 1.8; color: var(--subtle); text-align: center; }
+.login-card .account-form { gap: 16px; }
+.login-card .account-field { gap: 8px; }
+.login-card .account-field > span, .login-card .account-field > label { color: var(--text); font-size: 13px; font-weight: 500; }
+.login-card .account-field > input, .login-card .account-password { min-height: 42px; border-radius: 9px; border-color: color-mix(in srgb, var(--border) 75%, var(--muted)); background: var(--panel); }
+.login-card .account-field > input, .login-card .account-password > input { font-size: 13px; padding: 10px 12px; }
+.login-card .account-password { padding-right: 3px; }
+.login-card .account-password > input { border-radius: inherit; }
+.login-card .account-password .icon-button { width: 36px; height: 36px; border-radius: 8px; touch-action: manipulation; }
+.login-card .account-password .icon-button:focus-visible { outline-offset: -4px; }
+.login-card .account-field > input:focus, .login-card .account-password:focus-within { border-color: var(--purple); background: var(--surface); box-shadow: 0 0 0 3px color-mix(in srgb, var(--purple) 12%, transparent); }
+.login-card .login-submit { width: 100%; min-height: 42px; margin-top: 4px; border-radius: 9px; background: #7655d8; color: #fff; font-size: 14px; font-weight: 550; gap: 10px; touch-action: manipulation; }
+.login-card .login-submit:not(:disabled):hover { background: #6848c8; }
+.login-card .login-submit:disabled { opacity: .72; }
+.login-card .account-notice { font-size: 12px; padding: 11px 13px; }
+.login-hint { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--subtle); font-size: 12px; line-height: 1.7; text-align: center; }
+.login-footer { justify-self: center; color: var(--muted); font-size: 12px; line-height: 1.8; text-align: center; }
+@media (max-width: 600px) {
+  .studio-login { gap: 24px; padding: max(22px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+  .login-card { padding: 24px 22px 20px; border-radius: 18px; margin: 0; }
+  .login-card h1 { font-size: 22px; }
+  .login-description { margin-bottom: 20px; }
+  .login-card .account-field > input, .login-card .account-password > input { font-size: 16px; }
+  .login-brand .studio-brand-mark { width: 32px; height: 32px; }
+  .login-footer { font-size: 11px; }
+}

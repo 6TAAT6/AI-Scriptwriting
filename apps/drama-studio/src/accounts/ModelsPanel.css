@@ -1,0 +1,42 @@
+.models-panel { max-width: 850px; }
+.models-toolbar, .models-card-top, .models-card-footer, .models-actions { display: flex; align-items: center; gap: 12px; }
+.models-toolbar { justify-content: space-between; margin-bottom: 18px; color: var(--muted); font-size: 12px; }
+.models-list { display: grid; gap: 13px; }
+.models-card { padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); min-width: 0; }
+.models-card-top > div { min-width: 0; flex: 1; }
+.models-card h3, .models-form h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.models-card-top p { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
+.models-icon { padding: 10px; display: flex; border-radius: 10px; background: var(--purple-light); color: var(--purple); }
+.models-address { margin: 15px 0; overflow-wrap: anywhere; color: var(--subtle); font-size: 12px; }
+.models-card-footer { justify-content: space-between; border-top: 1px solid var(--border); padding-top: 12px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.models-configured { color: var(--teal); flex-shrink: 0; }
+.models-form { max-width: 640px; padding: 21px; border: 1px solid var(--border); border-radius: 12px; }
+.models-form select, .models-form textarea { width: 100%; padding: 11px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font: inherit; color: var(--text); }
+.models-form textarea { resize: vertical; min-height: 94px; }
+.models-form :is(input, textarea, select):focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+.models-form small { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.models-actions { justify-content: flex-end; flex-wrap: wrap; }
+.models-empty { padding: 30px 10px; color: var(--muted); font-size: 12px; text-align: center; }
+.model-names-panel { margin-top: 28px; padding: 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.model-names-heading { display: flex; gap: 10px; align-items: flex-start; color: var(--purple); }
+.model-names-heading h3 { margin: 0; font-size: 15px; color: var(--text); }
+.model-names-heading p { margin: 7px 0 18px; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.model-names-group { border: 0; padding: 0; margin: 0 0 20px; min-width: 0; }
+.model-names-group legend { width: 100%; padding: 10px 0; font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--border); }
+.model-name-row { display: grid; grid-template-columns: minmax(160px, .9fr) minmax(220px, 1.2fr); align-items: start; gap: 18px; padding-top: 13px; }
+.model-name-row .account-field { margin: 0; }
+.model-name-row .account-field label { font-size: 11px; color: var(--muted); }
+.model-name-row.is-hidden { opacity: .72; }
+.model-names-footer { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.model-names-footer small { color: var(--muted); font-size: 11px; line-height: 1.6; }
+.model-names-footer button { flex-shrink: 0; }
+@media (max-width: 640px) { .model-names-panel { padding: 16px; } .model-name-row { grid-template-columns: 1fr; gap: 7px; } .model-names-footer { align-items: flex-start; flex-direction: column; } }
+.model-names-heading > div { flex: 1; }
+.model-names-root { color: var(--purple); background: var(--purple-light); border-radius: 5px; padding: 4px 7px; font-size: 10px; white-space: nowrap; }
+.model-name-row .account-field > span { font-size: 11px; color: var(--muted); }
+.model-name-row .select-menu { width: 100%; min-width: 0; }
+.model-name-row .select-menu-trigger { width: 100%; min-height: 40px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 9px 10px; }
+.model-name-row .select-menu-value { text-align: left; }
+.model-name-row small { color: var(--muted); font-size: 10px; line-height: 1.5; }
+@media (max-width: 640px) { .model-name-row { grid-template-columns: 1fr; } .model-names-root { display: none; } }
+.model-name-row .select-menu-trigger > .select-menu-value { max-width: none; white-space: normal; overflow-wrap: anywhere; flex: 1; }

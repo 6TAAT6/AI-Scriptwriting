@@ -1,0 +1,26 @@
+name: jubao-drama
+version: 0.1.0
+description: 三个可直接替换且同时单选的剧本 Agent，以及可叠加的去 AI 味和大纲变剧本技能，支持人工确认、分批创作和独立审核。
+author: "田易昂"
+provides_tools:
+  - drama_project_create
+  - drama_project_status
+  - drama_material_import
+  - drama_submit
+  - drama_confirm
+  - drama_review
+  - drama_export
+  - drama_rules_read
+provides_hooks:
+  - pre_llm_call
+  - pre_tool_call
+  - post_tool_call
+  - transform_tool_result
+  - transform_llm_output
+  - post_approval_response
+  - on_session_start
+  - on_session_end
+  - subagent_stop
+provides_middleware:
+  - tool_execution
+  - llm_request

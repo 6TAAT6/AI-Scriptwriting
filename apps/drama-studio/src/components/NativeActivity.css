@@ -1,0 +1,29 @@
+.native-thinking, .native-notice, .native-turn-status, .native-background { color: var(--muted); font-size: 11px; line-height: 1.75; }
+.native-thinking { display: flex; align-items: center; gap: 6px; margin: 13px 0 8px; }
+.native-notice { display: flex; align-items: flex-start; gap: 6px; margin: 10px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.native-notice > svg { flex-shrink: 0; margin-top: 3px; }
+.native-notice.is-reflection { color: var(--purple); }
+.native-notice-label { color: #b57950; }
+.native-subagent { margin: 12px 0 16px; padding: 10px 13px; border: 1px solid var(--border); border-left-color: color-mix(in srgb, var(--purple) 50%, var(--border)); border-radius: 5px; background: var(--surface); }
+.native-subagent-heading { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; }
+.native-subagent-heading > svg { color: var(--purple); }
+.native-subagent-state { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
+.native-subagent[data-state='running'] .native-subagent-state { color: var(--purple); }
+.native-subagent[data-state='completed'] .native-subagent-state { color: var(--teal); }
+.native-subagent:is([data-state='error'], [data-state='failed'], [data-state='timeout'], [data-state='interrupted']) .native-subagent-state { color: #b56b4c; }
+.native-subagent-goal { margin: 7px 0; color: var(--subtle); font-size: 12px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.native-subagent-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; color: var(--muted); font-size: 10px; }
+.native-subagent-clock { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; font-variant-numeric: tabular-nums; }
+.native-subagent-tool { margin: 7px 0 0; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.native-subagent-preview { margin-top: 8px; color: var(--muted); font-size: 11px; }
+.native-subagent-preview > summary { display: flex; align-items: center; gap: 4px; width: fit-content; list-style: none; cursor: pointer; }
+.native-subagent-preview > summary:hover { color: var(--purple); }
+.native-subagent-preview > p { margin: 8px 0 0; color: var(--subtle); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.native-turn-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 14px 0 6px; font-size: 10px; }
+.native-turn-status > [role='status'] { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.native-turn-status > [role='status'] > svg { flex-shrink: 0; }
+.native-turn-status:is([data-state='disconnected'], [data-state='error'], [data-state='interrupted']) { color: #b56b4c; }
+.native-turn-status[data-state='waiting'] { color: var(--purple); }
+.native-turn-clock { font-variant-numeric: tabular-nums; }
+.native-background { display: flex; align-items: center; gap: 6px; margin: 8px 0 14px; font-size: 10px; }
+@media (prefers-reduced-motion: reduce) { .native-thinking .spin, .native-subagent .spin, .native-turn-status .spin { animation: none; } }

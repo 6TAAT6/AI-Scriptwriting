@@ -1,0 +1,314 @@
+{
+  "format": "drama-agent-neutral-workflow",
+  "version": "3.0.0",
+  "updated": "2026-09-30",
+  "platform_native_import": false,
+  "description": "平台中立配置说明；网站需实现节点调度、确认、存储与文件工具。",
+  "system_prompt": "prompts/00_system.md",
+  "rules": "rules/RULES.md",
+  "defaults": {
+    "regions": [
+      "中国",
+      "欧美"
+    ],
+    "gender_change": "none",
+    "western_fantasy": "preference_not_requirement",
+    "preserve": [
+      "confirmed_core_expectation",
+      "core_motives",
+      "power_relations",
+      "dramatic_function",
+      "effective_progression_and_payoff"
+    ],
+    "recreate": [
+      "event_trigger",
+      "crisis",
+      "obstacles",
+      "choices",
+      "evidence",
+      "solution_mechanism"
+    ],
+    "intensity": {
+      "policy": "A",
+      "key_conflicts_prefer": [
+        1,
+        2
+      ],
+      "supporting_beats_allow": [
+        3,
+        4
+      ],
+      "supporting_condition": "必须有效推进或兑现核心期待",
+      "every_event_minimum_level": null,
+      "quota": null
+    },
+    "candidate_count": 3,
+    "outline_batch_range": [
+      4,
+      6
+    ],
+    "script_batch_range": [
+      2,
+      3
+    ],
+    "batch_size_is_adjustable": true,
+    "narration_language": "zh-CN",
+    "dialogue_languages": [
+      "zh-CN",
+      "en"
+    ],
+    "english_placement": "parentheses_after_chinese_same_paragraph"
+  },
+  "nodes": [
+    {
+      "id": "M0",
+      "macro": "entry",
+      "prompt": "prompts/01_M0_入口路由.md",
+      "purpose": "识别任务范围、资料和已有确认"
+    },
+    {
+      "id": "M1",
+      "macro": 1,
+      "prompt": "prompts/02_M1_原剧分析.md",
+      "purpose": "原剧分析和核心期待依据"
+    },
+    {
+      "id": "H1",
+      "macro": 1,
+      "type": "human_decision",
+      "purpose": "确认/修正核心期待",
+      "reuse": "明确有效人工输入且无未解冲突；明确免除环节须单独记录"
+    },
+    {
+      "id": "M2A",
+      "macro": 2,
+      "prompt": "prompts/03_M2A_替换方案.md",
+      "purpose": "总体方案未选时提供三个实质不同候选"
+    },
+    {
+      "id": "H2",
+      "macro": 2,
+      "type": "human_decision",
+      "purpose": "选案、融合或继续扩散",
+      "reuse": "已有选定方向；或明确授权代选方案（不能替代H1）"
+    },
+    {
+      "id": "M2B",
+      "macro": 2,
+      "prompt": "prompts/04_M2B_事件与新纲.md",
+      "purpose": "全剧兑现路线、事件重造、分批新纲"
+    },
+    {
+      "id": "M3",
+      "macro": 3,
+      "prompt": "prompts/05_M3_正文创作.md",
+      "purpose": "按新纲分批创作完整正文"
+    },
+    {
+      "id": "M4",
+      "macro": "shared",
+      "prompt": "prompts/06_M4_独立审核.md",
+      "purpose": "独立审稿及定位问题"
+    },
+    {
+      "id": "M5",
+      "macro": "shared",
+      "prompt": "prompts/07_M5_阶段导出.md",
+      "purpose": "确认稿/两表Excel/完整Word的阶段交付"
+    },
+    {
+      "id": "EDITOR",
+      "macro": "shared",
+      "prompt": "prompts/90_batch_controller.md",
+      "purpose": "唯一正式状态、验收、存档与恢复"
+    },
+    {
+      "id": "END",
+      "macro": "exit",
+      "type": "terminal",
+      "purpose": "本次授权范围的交付完成"
+    }
+  ],
+  "transitions": [
+    [
+      "M0",
+      "M1",
+      "需分析或补核心期待依据"
+    ],
+    [
+      "M1",
+      "M5",
+      "交确认稿"
+    ],
+    [
+      "M5",
+      "H1",
+      "确认稿已展示"
+    ],
+    [
+      "H1",
+      "M1",
+      "用户修正；整理唯一当前依据"
+    ],
+    [
+      "H1",
+      "M2A",
+      "核心有效确认且方案未选"
+    ],
+    [
+      "H1",
+      "M2B",
+      "核心有效确认且已有方案"
+    ],
+    [
+      "M0",
+      "M2A",
+      "已有有效核心，需新选向"
+    ],
+    [
+      "M0",
+      "M2B",
+      "核心与方案有效，任务为新纲"
+    ],
+    [
+      "M0",
+      "M3",
+      "核心与方案有效，新纲输入足够，任务为正文"
+    ],
+    [
+      "M2A",
+      "H2",
+      "展示候选"
+    ],
+    [
+      "H2",
+      "M2A",
+      "更多候选/需具体化融合"
+    ],
+    [
+      "H2",
+      "M2B",
+      "明确选定或按明确授权代选完成"
+    ],
+    [
+      "M2B",
+      "M4",
+      "每批新纲完成"
+    ],
+    [
+      "M3",
+      "M4",
+      "每批正文完成"
+    ],
+    [
+      "M4",
+      "EDITOR",
+      "问题修复且实际复检后验收"
+    ],
+    [
+      "EDITOR",
+      "M2B",
+      "还有新纲批次"
+    ],
+    [
+      "EDITOR",
+      "M3",
+      "还有正文批次"
+    ],
+    [
+      "EDITOR",
+      "M5",
+      "本阶段范围完成且相应检查通过"
+    ],
+    [
+      "M5",
+      "M3",
+      "新纲Excel已交，授权含正文且前提齐全"
+    ],
+    [
+      "M5",
+      "END",
+      "已完成本次授权交付"
+    ],
+    [
+      "M0",
+      "M4",
+      "仅审不改；标明依据不足的维度"
+    ],
+    [
+      "M0",
+      "M5",
+      "仅排版/导出；不改剧情不冒称已审"
+    ]
+  ],
+  "repair_routes": {
+    "core_expectation": "M1_and_H1_if_material_change",
+    "event_or_causality": "M2B",
+    "dialogue_or_action": "M3",
+    "layout": "M5"
+  },
+  "scope_guard": "只审不改不执行返修；单模块任务完成即止；不得顺带扩大范围。",
+  "state_policy": {
+    "single_canonical_writer": "EDITOR",
+    "dependent_batches": "sequential_after_acceptance",
+    "independent_reads_and_checks": "parallel_allowed",
+    "material_core_change": "invalidate_affected_approvals_and_downstream_dependencies",
+    "confirmation_source": "trusted_user_action_not_model_output",
+    "record_types": [
+      "source",
+      "project_overrides",
+      "core",
+      "plan",
+      "characters",
+      "outline",
+      "script",
+      "continuity",
+      "payoffs",
+      "review",
+      "progress"
+    ]
+  },
+  "exports": {
+    "flow_1": {
+      "artifact": "核心期待感与创作依据",
+      "purpose": "人工确认"
+    },
+    "flow_2": {
+      "filename": "原新人物与大纲对照.xlsx",
+      "sheets": {
+        "人物对照": [
+          "原人物",
+          "新人物"
+        ],
+        "集数对照": [
+          "原集数",
+          "原大纲",
+          "新集数",
+          "新大纲"
+        ]
+      },
+      "extra_or_hidden_management_sheets": false
+    },
+    "flow_3": {
+      "filename": "全剧正文.docx",
+      "blank_lines_between_nonempty_paragraphs": 1,
+      "dialogue_bilingual_same_paragraph": true,
+      "tables_for_script": false
+    }
+  },
+  "validation": [
+    "scope_and_confirmation",
+    "dramatic_review",
+    "continuity_review",
+    "export_roundtrip_text",
+    "render_and_visual_check"
+  ],
+  "host_capabilities_required": [
+    "model_calls",
+    "source_file_parsing",
+    "trusted_user_decisions",
+    "persistent_project_storage",
+    "xlsx_docx_export",
+    "rendering_and_visual_review"
+  ]
+}

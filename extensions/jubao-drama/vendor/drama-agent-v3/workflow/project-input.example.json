@@ -1,0 +1,31 @@
+{
+  "_说明": "虚构示例，仅表达输入结构；缺资料先补最关键项，不要求用户填满所有字段。",
+  "task": "full_adaptation",
+  "scope": {
+    "source_episodes": "全剧",
+    "outline_episodes": "全剧",
+    "script_episodes": "全剧"
+  },
+  "target_region": "欧美",
+  "genre_preference": "现代现实或现代奇幻均可，先给方案",
+  "source_materials": [
+    {
+      "name": "用户上传的原剧本.xlsx",
+      "content": "由网站解析的全文或可检索资料引用"
+    }
+  ],
+  "gender_change": {
+    "mode": "none",
+    "explicit_scope": []
+  },
+  "existing_user_outline": null,
+  "user_provided_core_expectation": null,
+  "selected_plan": null,
+  "project_overrides": [],
+  "intensity_policy": "A",
+  "requested_outputs": [
+    "core_expectation_brief",
+    "comparison_xlsx",
+    "full_script_docx"
+  ]
+}

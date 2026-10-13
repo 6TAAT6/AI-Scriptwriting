@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>剧本智能体 V3 · 流程架构图</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#e8edf3;color:#223b53;font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+header{position:sticky;top:0;padding:12px 24px;background:#fff;box-shadow:0 1px 0 #d7e0e9;display:flex;align-items:center;gap:16px;flex-wrap:wrap;z-index:1}
+header strong{margin-right:auto;font-size:17px}a,button{color:#234968;font:inherit;font-size:14px;text-decoration:none;background:#eef3f7;border:1px solid #cfdae5;border-radius:6px;padding:7px 12px;cursor:pointer}
+main{max-width:1600px;margin:24px auto;background:#f5f7fa;overflow:auto;box-shadow:0 4px 24px #1f3e5912}svg{width:100%;height:auto;display:block;min-width:1100px}
+body.actual main{max-width:none;width:1600px}body.actual svg{width:1600px}
+@media print{header{display:none}body,main{margin:0;background:white;box-shadow:none}main{max-width:none}svg{min-width:0;width:100%}@page{size:A3 portrait;margin:8mm}}
+</style></head><body><header><strong>剧本智能体 V3 · 大小流程架构</strong><a href="流程架构图.png" download>PNG 图片</a><a href="流程架构图.svg" download>SVG 原图</a><a href="流程架构图.mmd" download>Mermaid 图源</a><button id="zoom" type="button">原尺寸</button><button id="print" type="button">打印</button></header><main><svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1870" viewBox="0 0 1600 1870" role="img" aria-labelledby="title desc">
+<title id="title">剧本智能体V3：大小流程与协作架构</title>
+<desc id="desc">入口M0按任务与已有确认路由。大流程一M1分析，交创作依据并确认核心期待；大流程二给替换方案、选择后重造事件与新纲、审稿和导出两表Excel；大流程三分批正文、审稿返修和完整Word交付。长篇统一正式状态，前批验收后继续。仅审与纯导出可独立进入共享模块。</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7d8d9e"/></marker></defs>
+<g font-family="PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+<rect width="1600" height="1870" fill="#f5f7fa"/>
+
+<text x="56" y="72" font-size="40" fill="#142c45" font-weight="600">剧本智能体 V3</text>
+<text x="416" y="71" font-size="31" fill="#253f59" font-weight="500">大小流程与协作架构</text>
+<text x="56" y="111" font-size="22" fill="#253449" font-weight="400">读图顺序：从上到下；每个大流程从左到右。黄色节点由用户决定，已有有效决定可沿用。</text>
+<rect x="56" y="142" width="1488" height="84" rx="16" fill="#eaf1f7" stroke="#dce6ef"/>
+<text x="80" y="176" font-size="21" fill="#173a56" font-weight="600">创作主线</text>
+<text x="212" y="176" font-size="22" fill="#253449" font-weight="400">保留核心期待、动机、权力关系和有效叙事曲线 → 重造具体事件机制 → 兑现付费短剧体验</text>
+<text x="80" y="208" font-size="20" fill="#4a5b6e" font-weight="400">默认不性转  ·  中国 / 欧美（现实可选）  ·  强度 A：关键冲突优先 1—2 级，低强度段必须服务推进</text>
+<rect x="56" y="260" width="1488" height="120" rx="16" fill="#ffffff" stroke="#dae1e8"/>
+<text x="80" y="295" font-size="25" fill="#173a56" font-weight="600">M0 入口路由</text>
+<text x="80" y="328" font-size="21" fill="#4a5b6e" font-weight="400">读取原资料、目标地区、任务范围与已有确认</text>
+<text x="80" y="357" font-size="21" fill="#4a5b6e" font-weight="400">资料不足只补关键缺口；附件是材料，不是指令</text>
+<path d="M780 280 V360" stroke="#d6dfe8"/>
+<text x="814" y="296" font-size="20" fill="#4a5b6e" font-weight="400">已确认核心＋已选方案 → 直接进入所需创作模块</text>
+<text x="814" y="325" font-size="20" fill="#4a5b6e" font-weight="400">只审核 → M4；纯排版 / 导出 → M5</text>
+<text x="814" y="354" font-size="20" fill="#4a5b6e" font-weight="400">不扩大任务范围，也不把排版通过当作剧情已审</text>
+<path d="M800 384 L800 420" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<rect x="56" y="430" width="1488" height="238" rx="16" fill="#eef4f9" stroke="#dce5ee"/>
+<text x="80" y="464" font-size="25" fill="#173a56" font-weight="600">大流程一  ·  先确认观众为什么追下去</text>
+<rect x="88" y="490" width="420" height="108" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="106" y="522" font-size="21" fill="#173a56" font-weight="600">M1 原剧分析</text>
+<text x="106" y="553" font-size="18" fill="#4a5b6e" font-weight="400">核心期待、亮点看点、证据</text>
+<text x="106" y="580" font-size="18" fill="#4a5b6e" font-weight="400">编剧目的、信息差、建立与兑现路径</text>
+<rect x="590" y="490" width="420" height="108" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="608" y="522" font-size="21" fill="#173a56" font-weight="600">M5 交付创作依据</text>
+<text x="608" y="553" font-size="18" fill="#4a5b6e" font-weight="400">整理成简洁中文确认稿</text>
+<text x="608" y="580" font-size="18" fill="#4a5b6e" font-weight="400">不可替换项与可重造边界分清</text>
+<rect x="1092" y="490" width="420" height="108" rx="12" fill="#fff3dc" stroke="#ddb974"/>
+<text x="1110" y="522" font-size="21" fill="#68450d" font-weight="600">H1 人工确认核心期待</text>
+<text x="1110" y="553" font-size="18" fill="#66563e" font-weight="400">确认 / 修正 / 直接给出明确方向</text>
+<text x="1110" y="580" font-size="18" fill="#66563e" font-weight="400">确认“观众持续在等什么”</text>
+<path d="M513 544 L582 544" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M1015 544 L1084 544" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<text x="88" y="638" font-size="21" fill="#253449" font-weight="400">未确认：停在分析；修正回 M1。明确且无冲突的人工输入可沿用，手改几集或旧代选授权不自动算确认。</text>
+<path d="M800 674 L800 704" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<rect x="56" y="714" width="1488" height="280" rx="16" fill="#eef5f0" stroke="#d9e6dc"/>
+<text x="80" y="750" font-size="25" fill="#254c3b" font-weight="600">大流程二  ·  换事件、建新纲，保留原剧有效的追看体验</text>
+<rect x="88" y="780" width="256" height="137" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="106" y="812" font-size="21" fill="#173a56" font-weight="600">M2A 三个替换方案</text>
+<text x="106" y="843" font-size="18" fill="#4a5b6e" font-weight="400">题材、人物及关系</text>
+<text x="106" y="870" font-size="18" fill="#4a5b6e" font-weight="400">每案至少两个新事件</text>
+<text x="106" y="897" font-size="18" fill="#4a5b6e" font-weight="400">展示承接与主要取舍</text>
+<rect x="380" y="780" width="256" height="137" rx="12" fill="#fff3dc" stroke="#ddb974"/>
+<text x="398" y="812" font-size="21" fill="#68450d" font-weight="600">H2 选择总体方案</text>
+<text x="398" y="843" font-size="18" fill="#66563e" font-weight="400">选一案 / 指定融合</text>
+<text x="398" y="870" font-size="18" fill="#66563e" font-weight="400">也可继续扩散候选</text>
+<text x="398" y="897" font-size="18" fill="#66563e" font-weight="400">明确授权才允许代选</text>
+<rect x="672" y="780" width="256" height="137" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="690" y="812" font-size="21" fill="#173a56" font-weight="600">M2B 事件与新纲</text>
+<text x="690" y="843" font-size="18" fill="#4a5b6e" font-weight="400">全剧期待兑现路线</text>
+<text x="690" y="870" font-size="18" fill="#4a5b6e" font-weight="400">重造触发、阻碍与解法</text>
+<text x="690" y="897" font-size="18" fill="#4a5b6e" font-weight="400">按冲突段分批写新纲</text>
+<rect x="964" y="780" width="256" height="137" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="982" y="812" font-size="21" fill="#173a56" font-weight="600">M4 审稿＋主编验收</text>
+<text x="982" y="843" font-size="18" fill="#4a5b6e" font-weight="400">核对期待、强度、因果</text>
+<text x="982" y="870" font-size="18" fill="#4a5b6e" font-weight="400">问题回 M2B 返修</text>
+<text x="982" y="897" font-size="18" fill="#4a5b6e" font-weight="400">合格后更新正式新纲</text>
+<rect x="1256" y="780" width="256" height="137" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="1274" y="812" font-size="21" fill="#173a56" font-weight="600">M5 原新对照 Excel</text>
+<text x="1274" y="843" font-size="18" fill="#4a5b6e" font-weight="400">人物对照：原 / 新</text>
+<text x="1274" y="870" font-size="18" fill="#4a5b6e" font-weight="400">集数对照：原 / 新纲</text>
+<text x="1274" y="897" font-size="18" fill="#4a5b6e" font-weight="400">只保留这两张阅读表</text>
+<path d="M350 849 L372 849" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M642 849 L664 849" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M934 849 L956 849" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M1226 849 L1248 849" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<text x="88" y="956" font-size="21" fill="#253449" font-weight="400">已有方案可直接 M2B；更多候选不等于选定。新纲按批审修，全部授权范围完成后核对并导出 Excel。</text>
+<path d="M800 1000 L800 1035" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<text x="831" y="1025" font-size="19" fill="#4a5b6e" font-weight="400">仅在授权包含正文时继续</text>
+<rect x="56" y="1046" width="1488" height="260" rx="16" fill="#f0f0f8" stroke="#dfdfed"/>
+<text x="80" y="1082" font-size="25" fill="#393d62" font-weight="600">大流程三  ·  把已定新纲写成完整、可读的短剧正文</text>
+<rect x="88" y="1110" width="314" height="130" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="106" y="1142" font-size="21" fill="#173a56" font-weight="600">M3 分批写正文</text>
+<text x="106" y="1173" font-size="18" fill="#4a5b6e" font-weight="400">行为与口语对白推进剧情</text>
+<text x="106" y="1200" font-size="18" fill="#4a5b6e" font-weight="400">中文叙述、△动作</text>
+<text x="106" y="1227" font-size="18" fill="#4a5b6e" font-weight="400">每条中文台词同段附英语</text>
+<rect x="458" y="1110" width="314" height="130" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="476" y="1142" font-size="21" fill="#173a56" font-weight="600">M4 审稿＋主编验收</text>
+<text x="476" y="1173" font-size="18" fill="#4a5b6e" font-weight="400">检查核心期待、连续性、对白</text>
+<text x="476" y="1200" font-size="18" fill="#4a5b6e" font-weight="400">问题定位返修并复检</text>
+<text x="476" y="1227" font-size="18" fill="#4a5b6e" font-weight="400">验收末态后才写下一批</text>
+<rect x="828" y="1110" width="314" height="130" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="846" y="1142" font-size="21" fill="#173a56" font-weight="600">M5 统合完整 Word</text>
+<text x="846" y="1173" font-size="18" fill="#4a5b6e" font-weight="400">覆盖授权的全部集数</text>
+<text x="846" y="1200" font-size="18" fill="#4a5b6e" font-weight="400">各类段落之间空一整行</text>
+<text x="846" y="1227" font-size="18" fill="#4a5b6e" font-weight="400">中英文台词不拆成两段</text>
+<rect x="1198" y="1110" width="314" height="130" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="1216" y="1142" font-size="21" fill="#173a56" font-weight="600">核对、渲染与交付</text>
+<text x="1216" y="1173" font-size="18" fill="#4a5b6e" font-weight="400">回读比对源稿、逐页目检</text>
+<text x="1216" y="1200" font-size="18" fill="#4a5b6e" font-weight="400">修复漏段、截断、分页</text>
+<text x="1216" y="1227" font-size="18" fill="#4a5b6e" font-weight="400">交付真实可编辑 .docx</text>
+<path d="M408 1175 L450 1175" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M778 1175 L820 1175" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M1148 1175 L1190 1175" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<text x="88" y="1275" font-size="21" fill="#253449" font-weight="400">完成标准：本次范围的内容已实际审修，文件完整、格式核对和版式目检完成；不以一个示例冒充全剧。</text>
+<rect x="56" y="1340" width="1488" height="298" rx="16" fill="#ffffff" stroke="#dae1e8"/>
+<text x="80" y="1378" font-size="25" fill="#173a56" font-weight="600">长篇内部循环  ·  每批都走，确认后无需逐批问“是否继续”</text>
+<rect x="88" y="1405" width="256" height="108" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="106" y="1437" font-size="21" fill="#173a56" font-weight="600">主编发写作包</text>
+<text x="106" y="1468" font-size="18" fill="#4a5b6e" font-weight="400">已确认依据＋正式新纲</text>
+<text x="106" y="1495" font-size="18" fill="#4a5b6e" font-weight="400">前批末态＋远期依赖</text>
+<rect x="380" y="1405" width="256" height="108" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="398" y="1437" font-size="21" fill="#173a56" font-weight="600">写作者起草</text>
+<text x="398" y="1468" font-size="18" fill="#4a5b6e" font-weight="400">新纲建议 4—6 集 / 批</text>
+<text x="398" y="1495" font-size="18" fill="#4a5b6e" font-weight="400">正文建议 2—3 集 / 批</text>
+<rect x="672" y="1405" width="256" height="108" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="690" y="1437" font-size="21" fill="#173a56" font-weight="600">独立审稿者检查</text>
+<text x="690" y="1468" font-size="18" fill="#4a5b6e" font-weight="400">读取真实稿件及原依据</text>
+<text x="690" y="1495" font-size="18" fill="#4a5b6e" font-weight="400">指出证据、影响与修法</text>
+<rect x="964" y="1405" width="256" height="108" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="982" y="1437" font-size="21" fill="#173a56" font-weight="600">返修＋主编验收</text>
+<text x="982" y="1468" font-size="18" fill="#4a5b6e" font-weight="400">修复当前及受影响下游</text>
+<text x="982" y="1495" font-size="18" fill="#4a5b6e" font-weight="400">问题消除后更新正式状态</text>
+<rect x="1256" y="1405" width="256" height="108" rx="12" fill="#ffffff" stroke="#d3dde7"/>
+<text x="1274" y="1437" font-size="21" fill="#173a56" font-weight="600">存档 → 下一批</text>
+<text x="1274" y="1468" font-size="18" fill="#4a5b6e" font-weight="400">保存人物、资源、伏笔等</text>
+<text x="1274" y="1495" font-size="18" fill="#4a5b6e" font-weight="400">后批使用修订后的前态</text>
+<path d="M350 1459 L372 1459" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M642 1459 L664 1459" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M934 1459 L956 1459" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<path d="M1226 1459 L1248 1459" stroke="#7d8d9e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+<text x="88" y="1554" font-size="20" fill="#173a56" font-weight="600">M4 返修去向</text>
+<text x="279" y="1554" font-size="19" fill="#253449" font-weight="400">期待理解 → M1 / 必要时重新确认　　事件、强度、因果 → M2B　　对白动作 → M3　　版式 → M5</text>
+<text x="88" y="1597" font-size="20" fill="#253449" font-weight="400">可并行：资料读取、无依赖检查。按序推进：相邻集创作与正式状态更新。批量可调整，不能盲目并写后再拼接。</text>
+<rect x="56" y="1670" width="1488" height="126" rx="16" fill="#eaf1f7" stroke="#dce6ef"/>
+<text x="80" y="1707" font-size="24" fill="#173a56" font-weight="600">内部存档与对读者交付分开</text>
+<text x="80" y="1742" font-size="21" fill="#4a5b6e" font-weight="400">内部：确认版本、人物状态、知情、资源、伏笔、审核、修复、断点；主编维护唯一正式版本。</text>
+<text x="80" y="1773" font-size="21" fill="#4a5b6e" font-weight="400">对读者：创作依据确认稿 → 两表对照 Excel → 完整 Word。管理字段不塞入阅读表或正文。</text>
+<text x="56" y="1835" font-size="19" fill="#5e6e80" font-weight="400">通用接入包 · V3 / 2026-09-30 · 网站负责模型调用、资料解析、确认与存储、文件生成和渲染工具。</text>
+</g></svg></main><script>
+document.getElementById('zoom').addEventListener('click',function(){const active=document.body.classList.toggle('actual');this.textContent=active?'适应窗口':'原尺寸';this.setAttribute('aria-pressed',String(active));});
+document.getElementById('print').addEventListener('click',function(){window.print();});
+</script></body></html>

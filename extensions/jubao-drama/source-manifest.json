@@ -1,0 +1,163 @@
+{
+  "archive_label": "V4",
+  "package_version": "3.0.0",
+  "archive_sha256": "e65612135d1ff1ad02c58d69fb0133262407745a69ec8e3be4f3967b5618c861",
+  "reference_site": "http://192.168.10.36:10618/",
+  "files": [
+    {
+      "path": "drama-agent-v3/README.md",
+      "sha256": "fc610a9bba4ef35e76cab52825248f7f66eb796b73c49a4fc5a261974035c28e",
+      "bytes": 3143
+    },
+    {
+      "path": "drama-agent-v3/architecture/index.html",
+      "sha256": "ce57ce2dc7670710d9b6ff5afec36dc28b74081f71c47dc8c1ae5782891baa1a",
+      "bytes": 17168
+    },
+    {
+      "path": "drama-agent-v3/architecture/流程架构图.mmd",
+      "sha256": "01601ca0a1ccf0a15cef0a95490b4f6addfb91263d4855bd437493f7dc413e57",
+      "bytes": 2353
+    },
+    {
+      "path": "drama-agent-v3/architecture/流程架构图.png",
+      "sha256": "604c3304aa7d2172423a1cbbd6925bb5733c85098527a071921fda11da93a2fc",
+      "bytes": 591699
+    },
+    {
+      "path": "drama-agent-v3/architecture/流程架构图.svg",
+      "sha256": "beb2fb368f54fbbbfe484d01e5aa120ee686e52ce2e7426ca4dc8c49d950b02b",
+      "bytes": 15347
+    },
+    {
+      "path": "drama-agent-v3/docs/交付格式.md",
+      "sha256": "21bbb3c4a113b28b4ecbd9b801a6beb362180e23388574de9ecd7f96dcf1d8ac",
+      "bytes": 3891
+    },
+    {
+      "path": "drama-agent-v3/docs/包内检查结果.md",
+      "sha256": "ae45496b320039e51c69c58f3990b434acd6ee2f06ca705047047a66e4440e9c",
+      "bytes": 1050
+    },
+    {
+      "path": "drama-agent-v3/docs/网站接入说明.md",
+      "sha256": "c3e90ea6dd4eb7590b29cfe7b08098e670bae18e0759cef9e894eb72929f8efd",
+      "bytes": 5927
+    },
+    {
+      "path": "drama-agent-v3/docs/验收用例.md",
+      "sha256": "d57528cc50dd37144a6aeb15ba249f60ce340ead7a08c0b1f91151eb932fffab",
+      "bytes": 3430
+    },
+    {
+      "path": "drama-agent-v3/prompts/00_system.md",
+      "sha256": "5ca98cd29d2d0de9b5c85db4996e6a7f1a983ca96600f2241c90bede72d91a47",
+      "bytes": 7088
+    },
+    {
+      "path": "drama-agent-v3/prompts/01_M0_入口路由.md",
+      "sha256": "2c277bcea5915c5fc63c740c1e950251375027e7bb8b59df9694901787e019f6",
+      "bytes": 1071
+    },
+    {
+      "path": "drama-agent-v3/prompts/02_M1_原剧分析.md",
+      "sha256": "65734205b74ee1990926e3e0ef2311af1adaaa98d8f9c41763cf4776502fcd0a",
+      "bytes": 1774
+    },
+    {
+      "path": "drama-agent-v3/prompts/03_M2A_替换方案.md",
+      "sha256": "de657be46947701b6043d1c8cf85e43bf4acfb710dd600e4891a84ee33554f65",
+      "bytes": 664
+    },
+    {
+      "path": "drama-agent-v3/prompts/04_M2B_事件与新纲.md",
+      "sha256": "fb1ba478d7873a223d8c245e2b5833ec7ff5cfe21cdc44e60c0015ff45cc1360",
+      "bytes": 1479
+    },
+    {
+      "path": "drama-agent-v3/prompts/05_M3_正文创作.md",
+      "sha256": "3ce8be1d36a1a8d79b46d0ae3c562e7bad79d3ecc2fcded61b6c3a54f85fc0ab",
+      "bytes": 1162
+    },
+    {
+      "path": "drama-agent-v3/prompts/06_M4_独立审核.md",
+      "sha256": "4de51207f4753c73cdca6eb5eff908fdaf19e03cfd24bd30d4b0e9a6e65d3f78",
+      "bytes": 1290
+    },
+    {
+      "path": "drama-agent-v3/prompts/07_M5_阶段导出.md",
+      "sha256": "d32b6ca62840a54e08ccdec0c0a1bb869652fc78baaee2d40755a19c391eed22",
+      "bytes": 1910
+    },
+    {
+      "path": "drama-agent-v3/prompts/90_batch_controller.md",
+      "sha256": "a56515506b65ade23491750835a0063cae8d1f297bc7e2399becf63282e7640c",
+      "bytes": 1522
+    },
+    {
+      "path": "drama-agent-v3/prompts/ALL_IN_ONE.md",
+      "sha256": "d41559dd1bdc049e4cc2383ef5341a87ee6b58f357fb48251cee25ca3046c615",
+      "bytes": 18346
+    },
+    {
+      "path": "drama-agent-v3/rules/MODULES.md",
+      "sha256": "9b0cfbcefd69891d498ec57f8859daf71b78004bfd3770deba11e936bdde7296",
+      "bytes": 14158
+    },
+    {
+      "path": "drama-agent-v3/rules/RULES.md",
+      "sha256": "e0bcb352b3108857f886b61d476575bba0240d26f05d8acc05901ea139f90b55",
+      "bytes": 15093
+    },
+    {
+      "path": "drama-agent-v3/runtime/README.md",
+      "sha256": "2359dabff60a20ab2dad3a6aa83de30cd26af626e9c37894fc66ad8f965f77ea",
+      "bytes": 5757
+    },
+    {
+      "path": "drama-agent-v3/runtime/guards.py",
+      "sha256": "015871b2f1ae285268134fa2f5941c3cc3bc84948df5e980e7b23fa1c6e532df",
+      "bytes": 5662
+    },
+    {
+      "path": "drama-agent-v3/templates/内部写作包.md",
+      "sha256": "146b3937af0c3707b3b181ca7efec714783a761fbbe754ac304aa44036fbbf59",
+      "bytes": 1437
+    },
+    {
+      "path": "drama-agent-v3/templates/核心期待感与创作依据.md",
+      "sha256": "52a1d0f442bce2eb0496b29666edd5181a3aac4bee087aa50910dcbb8a1d37c8",
+      "bytes": 2198
+    },
+    {
+      "path": "drama-agent-v3/templates/用户回复示例.md",
+      "sha256": "e420bf2f4a72f9a3d1509f9a1b2cf55514009b0db5aedd97e684296a55bdaa65",
+      "bytes": 1678
+    },
+    {
+      "path": "drama-agent-v3/tests/test_guards.py",
+      "sha256": "ead1dfbee5837f4b324522dbd5869e74fc667e74197718789757663b9b858101",
+      "bytes": 7523
+    },
+    {
+      "path": "drama-agent-v3/workflow/project-input.example.json",
+      "sha256": "2d5e4c4d8be5313665d45eabc7946fea1da653140b387681642cd89c41782414",
+      "bytes": 861
+    },
+    {
+      "path": "drama-agent-v3/workflow/project-state.example.json",
+      "sha256": "33de86f6215495fc85a315a03ce5a03590a40719beaf70d96065e1f63917ce59",
+      "bytes": 540
+    },
+    {
+      "path": "drama-agent-v3/workflow/workflow.json",
+      "sha256": "39f783a063e146af995cfec869479d94734a7d8f8cfdb6e34bc245373ee08595",
+      "bytes": 6976
+    },
+    {
+      "path": "drama-agent-v3/MANIFEST.json",
+      "sha256": "a905737680dd2d142a7d56adcda0b66889e072ffb42acb8540304b47f95b6f57",
+      "bytes": 5102
+    }
+  ]
+}

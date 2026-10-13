@@ -1,0 +1,12 @@
+.attachment-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; color: var(--subtle); font-size: 12px; line-height: 1.6; vertical-align: middle; }
+.attachment-label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-label.file-spreadsheet { color: #237b57; }
+.attachment-label.file-word { color: #3269b0; }
+.attachment-label.file-pdf { color: #b44b43; }
+:root[data-theme='dark'] .attachment-label.file-spreadsheet { color: #80c9a5; }
+:root[data-theme='dark'] .attachment-label.file-word { color: #91b8eb; }
+:root[data-theme='dark'] .attachment-label.file-pdf { color: #e6a09a; }
+.message-attachments { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; white-space: normal; }
+.message-attachments:not(:first-child) { margin-top: 9px; }
+.message-attachments .document-reference { max-width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.message-attachments .document-reference:hover { background: var(--panel); border-color: var(--muted); }

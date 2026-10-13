@@ -1,0 +1,2 @@
+来源压缩包：巨豹Agent-适配GM3.1版本.zip
+内部入口：script-master/SKILL.md

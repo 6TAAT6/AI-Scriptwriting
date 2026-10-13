@@ -1,0 +1,164 @@
+[
+  {
+    "file": "jubao-skill-humanize/references/humanizer/LICENSE",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\humanizer\\LICENSE",
+    "sha256": "caa1be9cba41c1afb88fe730ab1a4e04728295ea5b29ac2ee9f003a4ffbe3a77"
+  },
+  {
+    "file": "jubao-skill-humanize/references/humanizer/README.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\humanizer\\README.md",
+    "sha256": "783be1353d85d074a61b2b426876b0be6e29dc40f42025291bff26df717eae42"
+  },
+  {
+    "file": "jubao-skill-humanize/references/humanizer/SKILL.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\humanizer\\SKILL.md",
+    "sha256": "34922cab24cbb977c9f44bbe41a0a36f1f4c3bd04c0808acefea7906d13fd15e"
+  },
+  {
+    "file": "jubao-skill-humanize/references/Humanizer-zh/LICENSE",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\Humanizer-zh\\LICENSE",
+    "sha256": "4a02596d4fbad0e71215c7ce107fb13056ee2ad1f02a8ca778399c356fa04843"
+  },
+  {
+    "file": "jubao-skill-humanize/references/Humanizer-zh/README.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\Humanizer-zh\\README.md",
+    "sha256": "04b0ec5feaa3cdd94668871bbfc029c7557c024dfe6b22272fe2f6835e476718"
+  },
+  {
+    "file": "jubao-skill-humanize/references/Humanizer-zh/SKILL.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\Humanizer-zh\\SKILL.md",
+    "sha256": "35eca1b1a5d313b7ebcd2236670831c2e5f13920b8259208eeb3cfad94685fa0"
+  },
+  {
+    "file": "jubao-skill-humanize/references/remove-ai-flavor-writing-skill/LICENSE",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\remove-ai-flavor-writing-skill\\LICENSE",
+    "sha256": "fc4569fe4dbbcbc057926b6530aaad24f73b274054fd712d40aff69b1320ee08"
+  },
+  {
+    "file": "jubao-skill-humanize/references/remove-ai-flavor-writing-skill/README.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\remove-ai-flavor-writing-skill\\README.md",
+    "sha256": "989f6ed2f801ccce8aed7fadebd42993c87c247cfe99c678363cc79a8ea782dd"
+  },
+  {
+    "file": "jubao-skill-humanize/references/remove-ai-flavor-writing-skill/SKILL.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\remove-ai-flavor-writing-skill\\SKILL.md",
+    "sha256": "2bf8b7eb21b13cbec5e1b8433f09191c8dc63f459ee8bf18d008a3560eb2b559"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/LICENSE",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\LICENSE",
+    "sha256": "fca4ebb60a664a60110b149ee33a2e09f21b6a5e21ca6bd5439ff475d6129269"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/README.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\README.md",
+    "sha256": "98700d042054b24e4ba80eb0ef41db768e504866987598a6051e0685470facc8"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/SKILL.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\SKILL.md",
+    "sha256": "2450fa53c9d7f50c11130113dd0d5c4f77e10f2e5aecc92ef5442ff8cd3e7bc0"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/boundary-cases.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\boundary-cases.md",
+    "sha256": "42d5f022efdb85cee554a39ff924fd1338d99194f63d1ba47f606e9dfb2fef7e"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/examples.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\examples.md",
+    "sha256": "eafd48544dec6b41df658eeece34fb5f59127be90aa742cb70fa1ffc35737165"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/operation-manual.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\operation-manual.md",
+    "sha256": "96d6cb13ea74bea5139e8db5107dff4b68ec48ad47bf437db666ec14f13b7ae2"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/phrases-en.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\phrases-en.md",
+    "sha256": "69939fb9353cb91dd5696f9577d7e788613cef86e1bf812f8fbcbedde870ec58"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/phrases-zh.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\phrases-zh.md",
+    "sha256": "fe987078053117620e604ad107ff607f80d2386f98607f35c6ed0e1dd9e1bdbf"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/positive-style.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\positive-style.md",
+    "sha256": "71f8788ae5968d7fa6879431407750737d0eae37dda403a7e48466bf2b882ea4"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/protected-spans.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\protected-spans.md",
+    "sha256": "c01f22ccb74bcc8e9ed538650ba05123ce4a39e0cdea2bf67b9cd388bff00218"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/scene-guardrails.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\scene-guardrails.md",
+    "sha256": "13567f8fea959af8954de2479976fbb492cc88f3e45a36a06ca312000b1cd830"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/scene-packs.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\scene-packs.md",
+    "sha256": "ad02bb8902cd5a62d3f356922180cf43a443fcd387e8776b06d613aa7ecc0539"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/severity.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\severity.md",
+    "sha256": "20d8c37ba54cee7313c0b179e6e1f3cc1b6b3d1fe8c942fe3ff3f1fd27efb6f0"
+  },
+  {
+    "file": "jubao-skill-humanize/references/shuorenhua/references/structures.md",
+    "archive": "巨豹skill-去AI味skills.zip",
+    "entry": "去AI味-skills-Top10\\skills\\shuorenhua\\references\\structures.md",
+    "sha256": "b28f27cbe265fc5d0e2cdeebe795059b21085591648cabc3b8df38ba8ef66167"
+  },
+  {
+    "file": "jubao-skill-outline-script/references/source-SKILL.md",
+    "archive": "巨豹Agent-大纲变剧本 .zip",
+    "entry": "巨豹Agent-大纲变剧本 /短剧编剧skill/短剧编剧Skill/SKILL.md",
+    "sha256": "e51115c26bc6e88877be669d87d985c4417c55634acc2f5f95bda2c76a6a69e8"
+  },
+  {
+    "file": "jubao-skill-outline-script/references/story-engine.md",
+    "archive": "巨豹Agent-大纲变剧本 .zip",
+    "entry": "巨豹Agent-大纲变剧本 /短剧编剧skill/短剧编剧Skill/references/story-engine.md",
+    "sha256": "7fc4bd524782241624588c962278dc4ff1813fc95de4469ea488dce5357dfc00"
+  },
+  {
+    "file": "jubao-skill-outline-script/references/format-standard.md",
+    "archive": "巨豹Agent-大纲变剧本 .zip",
+    "entry": "巨豹Agent-大纲变剧本 /短剧编剧skill/短剧编剧Skill/references/format-standard.md",
+    "sha256": "abb499e2bb1f5b3217da3dfffb314a83cf9a6a3d952b3304e180c90dd9d02641"
+  },
+  {
+    "file": "jubao-skill-outline-script/references/production-writing.md",
+    "archive": "巨豹Agent-大纲变剧本 .zip",
+    "entry": "巨豹Agent-大纲变剧本 /短剧编剧skill/短剧编剧Skill/references/production-writing.md",
+    "sha256": "67aa4c53c64ef271365fcbd5448d81bb5b1932f5d4e4a5819e0e3dec665d05a4"
+  }
+]
