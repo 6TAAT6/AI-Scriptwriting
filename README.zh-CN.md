@@ -2,6 +2,10 @@
   <img src="assets/banner.png" alt="Hermes Agent" width="100%">
 </p>
 
+## 巨豹智能体正式版源码
+
+本仓库当前正式源码快照为 `20261123-agent22-length-formal`，工作区版本为 `2.6.4`。正式版包含剧本工作区、独立剧本 Agent、稿件保存与核验、公司统一登录和正式模型接入边界。完整目录、开发、测试与安全说明请查看 [README.md](README.md)。
+
 # Hermes Agent ☤
 
 <p align="center">
