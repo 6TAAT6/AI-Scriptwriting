@@ -192,7 +192,10 @@ jobs:
 
       - name: Create/update PR and enable auto-merge
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Use the repository token for PR operations. The App token remains the
+          # push credential above, while PR creation follows the repository's
+          # Actions pull-request permission setting.
+          GH_TOKEN: ${{ github.token }}
           BOT_BRANCH: bot/js-autofix
         run: |
           set -euo pipefail
@@ -215,7 +218,10 @@ jobs:
 
       - name: Wait for merge, auto-close on failure or stale
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Use the repository token for PR operations. The App token remains the
+          # push credential above, while PR creation follows the repository's
+          # Actions pull-request permission setting.
+          GH_TOKEN: ${{ github.token }}
           START_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
