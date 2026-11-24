@@ -15,7 +15,7 @@
 .next-step-draft-hint {
   margin: -2px 0 10px;
   color: var(--subtle);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 .next-step-list {
@@ -39,8 +39,8 @@
 .next-step-columns-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .next-step-label {
   color: var(--text);
-  font-size: 12px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
@@ -50,8 +50,8 @@
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--purple-light);
-  color: var(--purple);
-  font-size: 10px;
+  color: var(--purple-ink);
+  font-size: 12px;
   font-weight: 600;
 }
 .next-step-prompt {
@@ -61,7 +61,7 @@
   overflow: hidden;
   margin: 6px 0 9px;
   color: var(--subtle);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.75;
   overflow-wrap: anywhere;
 }
@@ -81,14 +81,14 @@
   min-height: 32px;
   padding: 5px 6px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
   transition: background .15s ease, color .15s ease;
 }
 .next-step-send { color: var(--purple); }
 .next-step-edit { color: var(--subtle); }
-.next-step-send:not(:disabled):hover { background: var(--purple-light); }
+.next-step-send:not(:disabled):hover { background: var(--purple-light); color: var(--purple-ink); }
 .next-step-edit:not(:disabled):hover { background: var(--hover); color: var(--text); }
 .next-step-actions > button:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 @container next-steps (max-width: 540px) {

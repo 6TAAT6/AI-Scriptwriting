@@ -16,18 +16,20 @@ test.each(['super_admin', 'admin'] as const)('%s 在员工对话中按地区折�
   $sidebar.set({ ...sidebar, loaded: true, busy: false, error: '' })
   $employeeGroups.set([
     { id: 'cq-access', employeeId: 'd64dc6c0-9fc6-4c8f-911c-61957f4a4c63', createdBy: 'viewer', createdAt: '', employee: { id: 'd64dc6c0-9fc6-4c8f-911c-61957f4a4c63', username: 'cq-member', display_name: '重庆成员', role: 'employee', profile: 'cq-profile' }, sessions: [{ id: 'cq-chat', title: '重庆稿件' }] },
-    { id: 'hz-access', employeeId: 'hz-member', createdBy: 'viewer', createdAt: '', employee: { id: 'hz-member', username: 'hz-member', display_name: '杭州成员', role: 'employee', profile: 'hz-profile' }, sessions: [{ id: 'hz-chat', title: '杭州稿件' }] }
+    { id: 'hz-access', employeeId: 'hz-member', createdBy: 'viewer', createdAt: '', employee: { id: 'hz-member', username: 'hz-member', display_name: '横店成员', role: 'employee', profile: 'hz-profile' }, sessions: [{ id: 'hz-chat', title: '横店稿件' }] }
   ])
   vi.stubGlobal('fetch', async () => new Response(JSON.stringify(sidebar), { headers: { 'Content-Type': 'application/json' } }))
   await act(async () => { render(<Sidebar active theme="light" onTheme={() => {}} onSettings={() => {}} onCollapse={() => {}} onSelect={() => {}} />) })
   const chongqing = screen.getByRole('region', { name: '重庆员工对话' })
   const hangzhou = screen.getByRole('region', { name: '横店员工对话' })
+  // 员工对话默认收起：地区与人员都要点开才显示对话。
+  expect(within(chongqing).queryByText('横店成员')).toBeNull()
+  expect(within(chongqing).queryByRole('button', { name: '重庆稿件' })).toBeNull()
+  fireEvent.click(within(chongqing).getByRole('button', { name: '展开重庆分组' }))
+  fireEvent.click(within(chongqing).getByRole('button', { name: '展开重庆成员的对话' }))
   expect(within(chongqing).getByTitle('重庆稿件')).toBeTruthy()
-  expect(within(chongqing).queryByText('杭州成员')).toBeNull()
+  expect(within(hangzhou).queryByRole('button', { name: '横店稿件' })).toBeNull()
   fireEvent.click(within(chongqing).getByRole('button', { name: '收起重庆分组' }))
   expect(within(chongqing).queryByRole('button', { name: '重庆稿件' })).toBeNull()
-  expect(within(hangzhou).getByTitle('杭州稿件')).toBeTruthy()
-  fireEvent.click(within(chongqing).getByRole('button', { name: '展开重庆分组' }))
-  expect(within(chongqing).getByTitle('重庆稿件')).toBeTruthy()
   expect($employeeGroups.get()).toHaveLength(2)
 })

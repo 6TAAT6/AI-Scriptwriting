@@ -66,11 +66,11 @@ test('失败或迟到的切换回执不改变其他对话，生成中不能切�
   expect(workspace.session.get().info.model).toBeUndefined()
 })
 
-test('员工新会话使用服务端品牌默认模型，手动模型与思考草稿刷新后优先', async () => {
+test('员工新会话使用首个品牌模型，手动模型与思考草稿刷新后优先', async () => {
   const requests: { method: string; params: unknown }[] = []
-  const catalog = { model: 'model-full', provider: 'first', providers: [{ slug: 'first', name: '创作服务', models: ['writer-a', 'model-full'], capabilities: {
+  const catalog = { model: 'writer-a', provider: 'first', providers: [{ slug: 'first', name: '创作服务', models: ['writer-a', 'brand-text-1'], capabilities: {
     'writer-a': { fast: false, reasoning: true, supported_efforts: ['low', 'high'], default_reasoning_effort: 'high' },
-    'model-full': { fast: false, reasoning: true, supported_efforts: ['low', 'high'], default_reasoning_effort: 'high' }
+    'brand-text-1': { fast: false, reasoning: true, supported_efforts: ['low', 'high'], default_reasoning_effort: 'high' }
   } }] }
   const api: WorkspaceApi = { profile: 'new-employee', materials: async () => ({ project: null, sources: [] }), rpc: (async (method, params) => {
     requests.push({ method, params })
@@ -82,7 +82,7 @@ test('员工新会话使用服务端品牌默认模型，手动模型与思考�
   const workspace = new Workspace(api, undefined, () => 'employee')
   workspace.models.set(catalog)
   await workspace.ensureSession()
-  expect(requests.find(row => row.method === 'session.create')?.params).toMatchObject({ model: 'model-full', provider: 'first', reasoning_effort: 'high' })
+  expect(requests.find(row => row.method === 'session.create')?.params).toMatchObject({ model: 'brand-text-1', provider: 'first', reasoning_effort: 'high' })
   workspace.newConversation()
   await workspace.selectModel('writer-a', 'first')
   await workspace.setReasoningEffort('low')
@@ -101,5 +101,5 @@ test('员工新会话使用服务端品牌默认模型，手动模型与思考�
   api.profile = 'another-employee'
   await beforeLogin.initialize(false)
   expect(beforeLogin.session.get().info.model).toBeUndefined()
-  expect(beforeLogin.modelSelection().model).toBe('model-full')
+  expect(beforeLogin.modelSelection().model).toBe('brand-text-1')
 })

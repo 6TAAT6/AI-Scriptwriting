@@ -1,4 +1,4 @@
-import { isImageFile } from '../../shared/attachments.mjs'
+import { isDocumentFile, isImageFile } from '../../shared/attachments.mjs'
 
 export function attachmentText(value: unknown): string {
   if (typeof value === 'string') return value
@@ -6,18 +6,22 @@ export function attachmentText(value: unknown): string {
   return value.filter(part => ['text', 'input_text'].includes(part?.type) && typeof part.text === 'string').map(part => part.text).join('\n')
 }
 
-export function attachedImages(text: string): { path: string; name: string }[] {
-  return [...text.matchAll(/@file:(?:`([^`]+)`|"([^"]+)"|([^\s]+))/g)].flatMap(match => {
+/** 消息中的附件引用按路径去重：Hermes 展开附件时会在“Attached Context”里再提一次同一文件。 */
+function referencedFiles(text: string, accept: (path: string) => boolean): { path: string; name: string }[] {
+  const found = new Map<string, { path: string; name: string }>()
+  for (const match of text.matchAll(/@file:(?:`([^`]+)`|"([^"]+)"|([^\s]+))/g)) {
     const path = match[1] || match[2] || match[3]
-    return path.startsWith('/') && isImageFile(path) ? [{ path, name: path.split('/').pop()! }] : []
-  })
+    if (path.startsWith('/') && accept(path) && !found.has(path)) found.set(path, { path, name: path.split('/').pop()! })
+  }
+  return [...found.values()]
+}
+
+export function attachedImages(text: string): { path: string; name: string }[] {
+  return referencedFiles(text, isImageFile)
 }
 
 export function attachedFiles(text: string): { path: string; name: string }[] {
-  return [...text.matchAll(/@file:(?:`([^`]+)`|"([^"]+)"|([^\s]+))/g)].flatMap(match => {
-    const path = match[1] || match[2] || match[3]
-    return path.startsWith('/') && /\.(?:txt|md|docx|xlsx|csv|pdf)$/i.test(path) ? [{ path, name: path.split('/').pop()! }] : []
-  })
+  return referencedFiles(text, isDocumentFile)
 }
 
 interface AttachmentAvailability {

@@ -3,7 +3,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { canManageUser, deleteUser, listUsers, roleLabels, type StudioUser } from './api'
 import { FormNotice } from './Fields'
 import { UserEditor, type UserEditorMode } from './UserEditor'
+import { CompanyPendingPanel } from './CompanyPendingPanel'
 import { groupByRegion } from './regions'
+import { ORGANIZATIONS } from '../../shared/organizations.mjs'
 
 export function UsersPanel({ actor }: { actor: StudioUser }) {
   const [users, setUsers] = useState<StudioUser[]>([])
@@ -11,7 +13,7 @@ export function UsersPanel({ actor }: { actor: StudioUser }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
-  const [collapsed, setCollapsed] = useState({ chongqing: false, hangzhou: false })
+  const [collapsed, setCollapsed] = useState({ chongqing: false, hangzhou: false, unassigned: false })
   const [editor, setEditor] = useState<UserEditorMode | null>(null)
   const [deleting, setDeleting] = useState<StudioUser | null>(null)
   useEffect(() => {
@@ -45,6 +47,7 @@ export function UsersPanel({ actor }: { actor: StudioUser }) {
       <div><span className="account-stat-icon admin"><ShieldCheck size={19} /></span><span><small>管理员</small><strong>{loading ? '—' : users.filter(user => user.role !== 'employee').length}</strong></span></div>
       <div><span className="account-stat-icon employee"><UserRound size={19} /></span><span><small>员工</small><strong>{loading ? '—' : users.filter(user => user.role === 'employee').length}</strong></span></div>
     </div>
+    {actor.organization_policy && <CompanyPendingPanel onSynced={() => void refresh()} onAssigned={saved} />}
     <div className="account-list-toolbar"><label className="account-search"><Search size={16} /><input type="search" aria-label="搜索人员" placeholder="搜索用户名或昵称…" value={query} onChange={event => setQuery(event.target.value)} /></label><button type="button" className="secondary-button" onClick={() => void refresh()} disabled={loading} aria-busy={loading}><RefreshCw size={15} className={loading ? 'account-spin' : ''} />刷新</button></div>
     <FormNotice error={error} message={notice} />
     <div className="account-table-wrap" aria-busy={loading}>
@@ -58,13 +61,17 @@ export function UsersPanel({ actor }: { actor: StudioUser }) {
             </button>
           </th></tr>
           {expanded && region.members.map(user => <tr key={user.id}>
-          <td><strong>{user.username}</strong>{user.id === actor.id && <span className="account-self">我</span>}</td><td>{user.display_name}</td>
+          <td><strong>{user.username}</strong>{user.id === actor.id && <span className="account-self">我</span>}</td><td>{user.display_name}
+            {user.role === 'admin' && Boolean(user.managed_organizations?.length) && <small className="account-cell-subtitle">负责{user.managed_organizations?.map(value => ORGANIZATIONS[value]).join('、')}</small>}
+            {user.local_login_reason === 'pending_company' && <small className="account-cell-subtitle">公司账号待绑定，原登录保留</small>}
+            {user.company_removed_at && <small className="account-cell-subtitle">公司后台已删除{user.company_sync_disabled ? '，已自动停用，资料保留' : ''}</small>}
+          </td>
           <td><span className={`account-role ${user.role === 'employee' ? 'employee' : ''}`}>{roleLabels[user.role]}</span></td>
           <td><span className={`account-status ${!user.enabled ? 'disabled' : user.activation_required ? 'pending' : ''}`}><span />{!user.enabled ? '已停用' : user.activation_required ? '待激活' : user.role === 'super_admin' ? '正常' : '已激活'}</span></td>
           <td><time dateTime={user.created_at}>{formatDate(user.created_at)}</time></td>
           <td>{canManageUser(actor, user) ? <div className="account-row-actions">
             <button type="button" onClick={() => setEditor({ kind: 'edit', user })}><PencilLine size={12} />编辑</button>
-            <button type="button" onClick={() => setEditor({ kind: 'password', user })}>重置密码</button>
+            {user.auth_source !== 'company' && <button type="button" onClick={() => setEditor({ kind: 'password', user })}>重置密码</button>}
             <button type="button" className={user.enabled ? 'is-danger' : 'is-enable'} onClick={() => setEditor({ kind: 'status', user })}>{user.enabled ? '停用' : '启用'}</button>
             {actor.role === 'super_admin' && user.role !== 'super_admin' && <button type="button" className="is-danger" onClick={() => setDeleting(user)}><Trash2 size={12} />删除</button>}
           </div> : <span className="account-protected">{user.role === 'super_admin' ? '受保护账号' : user.id === actor.id ? '在个人账号中设置' : '仅超级管理员可管理'}</span>}</td>

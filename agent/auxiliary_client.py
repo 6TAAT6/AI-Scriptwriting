@@ -4284,15 +4284,12 @@ def _try_main_agent_model_fallback(
     """Last-resort fallback to the main agent provider + model after the configured chain is exhausted.
     ``failed_model`` scoping per ``_failed_backend_skip``; same-URL custom endpoints serve many models,
     so a hung aux model says nothing about the main model's health. Returns (client, model, label) or (None, None, "")."""
-    main_provider = (_read_main_provider() or "").strip()
-    main_model = (_read_main_model() or "").strip()
-    if main_provider.lower() == "moa":
-        # MoA virtual provider: fall back to the preset's aggregator (the acting model).
-        _agg_provider, _agg_model = _resolve_moa_aggregator(main_model)
-        if not _agg_provider or not _agg_model:
-            return None, None, ""
-        main_provider, main_model = _agg_provider, _agg_model
-    if not main_provider or not main_model or main_provider.lower() in {"auto", ""}:
+    from agent.auxiliary_fallback_policy import main_model_fallback_allowed
+    if not main_model_fallback_allowed(_get_auxiliary_task_config(task)):
+        return None, None, ""
+    runtime = _normalize_main_runtime(None)
+    main_provider, main_model, runtime_base, runtime_key, runtime_mode = _main_route_target(runtime, None)
+    if not main_provider or not main_model or main_provider.lower() in {"auto", "moa", ""}:
         return None, None, ""
     if task == "vision" and (
             main_provider in _PROVIDERS_WITHOUT_VISION or not _main_model_supports_vision(main_provider, main_model)):
@@ -4301,7 +4298,7 @@ def _try_main_agent_model_fallback(
         logger.info("Auxiliary vision: %s on %s — main agent provider %s accepts no image input, not falling back",
                     reason, failed_provider, main_provider)
         return None, None, ""
-    main_base_url = _custom_health_base_url(main_provider)
+    main_base_url = _custom_health_base_url(main_provider, runtime_base)
     if _failed_backend_skip(
             failed_provider, failed_model, failed_base_url=failed_base_url,
             failure_scope=failure_scope)(main_provider, main_model, main_base_url):
@@ -4310,7 +4307,9 @@ def _try_main_agent_model_fallback(
         _log_skip_unhealthy(main_provider, task, base_url=main_base_url)
         return None, None, ""
     try:
-        client, resolved_model = resolve_provider_client(provider=main_provider, model=main_model)
+        # 回退必须沿用主会话的连接、凭据和协议；裸 custom 会丢失命名接入身份。
+        routed = _try_main_provider_route(main_provider, main_model, runtime_base, runtime_key, runtime_mode)
+        client, resolved_model = routed[:2] if routed else (None, None)
     except Exception:
         client, resolved_model = None, None
     if client is None:
@@ -6736,7 +6735,11 @@ def _build_call_kwargs(
     ``no_progress_timeout`` is a Codex-Responses-only extra (consumed by
     ``_CodexCompletionsAdapter.create``'s ``**kwargs`` catch-all); callers must only pass it
     when the resolved client is a ``CodexAuxiliaryClient`` — real SDK clients don't accept it."""
-    kwargs: Dict[str, Any] = {"model": model, "messages": messages, "timeout": timeout}
+    # Same wire-only Gemini rendering as the main transport (agent/relay_prompt_compat.py).
+    from agent.relay_prompt_compat import localize_relay_sensitive_guidance
+    kwargs: Dict[str, Any] = {
+        "model": model, "messages": localize_relay_sensitive_guidance(messages, model), "timeout": timeout,
+    }
     if no_progress_timeout is not None:
         kwargs["no_progress_timeout"] = no_progress_timeout
     effective_base = base_url or (_current_custom_base_url() if provider == "custom" else "")

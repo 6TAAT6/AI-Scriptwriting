@@ -13,11 +13,13 @@ export const reasoningLabel = (effort: string) => labels[effort] || effort
 
 export function modelReasoning(catalog: StudioModelOptions, info: StudioSessionLiveInfo) {
   const model = info.model || catalog.model || ''
-  const provider = info.provider === 'custom' ? catalog.provider : info.provider || catalog.provider
-  const candidates = catalog.providers.filter(row => row.slug === provider || row.aliases?.includes(provider || ''))
+  const rawProvider = String(info.provider || catalog.provider || '')
+  const provider = rawProvider === 'custom' ? catalog.provider : rawProvider.replace(/^custom:/, '')
+  const candidates = catalog.providers.filter(row => row.slug === provider || row.aliases?.some(alias => alias === rawProvider || alias.replace(/^custom:/, '') === provider))
   // 品牌入口可以改绑，旧会话仍以实际使用的模型能力为准；切换入口时不沿用旧快照。
-  const caps = info.model_capabilities?.model === model ? info.model_capabilities.capabilities
-    : candidates.length === 1 ? candidates[0].capabilities?.[model] : undefined
+  const snapshot = info.model_capabilities?.model === model ? info.model_capabilities.capabilities : undefined
+  const snapshotHasEfforts = Array.isArray(snapshot?.supported_efforts) && snapshot.supported_efforts.length > 0
+  const caps = snapshotHasEfforts ? snapshot : candidates.length === 1 ? candidates[0].capabilities?.[model] : undefined
   const declared = Array.isArray(caps?.supported_efforts) ? caps.supported_efforts : []
   const efforts = caps?.reasoning ? REASONING_EFFORT_VALUES.filter(value => declared.includes(value) && (value !== 'none' || caps.can_disable_reasoning !== false)) : []
   const defaultEffort = efforts.find(value => value === caps?.default_reasoning_effort)

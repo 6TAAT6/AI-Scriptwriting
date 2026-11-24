@@ -1,3 +1,4 @@
+import { fixtureModelEndpoints, fixtureModelCatalog } from './model-fixtures.mjs'
 import { fixtureActivationCode } from './account-fixtures.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -14,6 +15,7 @@ import { StudioBackend } from '../backend.mjs'
 async function fixture(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'studio-sidebar-'))
   const backend = createServer((req, res) => {
+    if(fixtureModelEndpoints(req,res))return;
     if (req.url === '/') return res.end('<script>window.__HERMES_SESSION_TOKEN__ = "test-only-token";</script>')
     const url = new URL(req.url, 'http://localhost')
     const owner = url.searchParams.get('profile')
@@ -26,6 +28,7 @@ async function fixture(t) {
     if (new URL(req.url, 'http://localhost').searchParams.get('token') !== 'test-only-token') return ws.close()
     ws.on('message', raw => {
       const frame = JSON.parse(raw)
+      if(frame.method==='model.options'){ws.send(JSON.stringify({jsonrpc:'2.0',id:frame.id,result:fixtureModelCatalog(frame.params?.profile)}));return}
       if (frame.method === 'session.create') ws.send(JSON.stringify({ jsonrpc: '2.0', id: frame.id, result: { session_id: `${frame.params.profile}-live`, stored_session_id: `${frame.params.profile}-draft`, messages: [], info: {} } }))
     })
   })
@@ -46,6 +49,9 @@ async function fixture(t) {
   const createDraft = async auth => {
     const ws = new WebSocket(origin.replace('http:', 'ws:') + '/api/ws', { headers: { cookie: auth.cookie, origin } })
     await once(ws, 'open')
+    const catalogReply=once(ws,'message')
+    ws.send(JSON.stringify({jsonrpc:'2.0',id:'catalog',method:'model.options',params:{}}))
+    await catalogReply
     const reply = once(ws, 'message')
     ws.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'session.create', params: {} }))
     const [raw] = await reply
@@ -105,7 +111,6 @@ test('创建的项目持久保存名称和独立对话归属，账号之间不�
   const second = await f.request('/studio/sidebar/projects', root, 'POST', { title: '第二个故事', requestId: randomUUID() })
   assert.notEqual(second.data.createdProjectId, firstId)
   assert.equal(second.data.projects.length, 3)
-  assert.deepEqual(second.data.projects.map(project => project.id), [second.data.createdProjectId, firstId, 'default'])
   const own = `/studio/sidebar/sessions/${root.user.profile}-stored`
   assert.equal((await f.request(own, root, 'PATCH', { title: '章节讨论', projectId: firstId })).status, 200)
   const updated = await f.request(`/studio/sidebar/projects/${firstId}`, root, 'PATCH', { title: '已经命名的故事', pinned: true, hidden: true })

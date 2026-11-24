@@ -1,20 +1,26 @@
 import { createServer } from 'node:http'
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { geminiImageRequest, geminiImageData } from './gemini-images.mjs'
+import { geminiStructuredRequest } from './gemini-schema.mjs'
 import { once } from 'node:events'
 import { chmod } from 'node:fs/promises'
 import { InferenceQueue } from './inference-queue.mjs'
 import { inferenceDeadline, inferenceTimeouts } from './inference-deadline.mjs'
-import { inferenceError, upstreamFailure, publicInferenceError, inferenceDiagnostic } from './inference-errors.mjs'
+import { inferenceError, upstreamFailure, publicInferenceError, inferenceDiagnostic, expectedIncompleteResponse, transportCause, admissionRetryAfter } from './inference-errors.mjs'
 
 const BODY_LIMIT = 8 * 1024 * 1024
 // 截图会作为原生视觉内容保留在会话中，输入预算包含图片的 base64 开销。
 const REQUEST_LIMIT = 32 * 1024 * 1024
 const OUTPUT_LIMIT = 131072
+// Gemini 输出上限为 65536；codex2api 对更大的 max_tokens 直接回 400（2026-11-17 员工 400 根因）。
+const GEMINI_OUTPUT_LIMIT = 65536
+const defaultOutputLimit = model => /gemini/i.test(model) ? GEMINI_OUTPUT_LIMIT : OUTPUT_LIMIT
 const CONCURRENCY = 10
 const QUEUE_CAPACITY = 40
 const object = value => value && typeof value === 'object' && !Array.isArray(value)
-const fail = status => { const error = new Error('创作请求未通过校验。'); error.status = status; throw error }
+const requestCodes = { 400: 'request_invalid', 401: 'request_unauthorized', 403: 'request_forbidden',
+  404: 'request_not_found', 405: 'request_method_not_allowed', 409: 'request_conflict', 413: 'request_too_large' }
+const fail = (status, code = requestCodes[status] || 'provider_unavailable') => { throw inferenceError(status, code) }
 const equal = (left, right) => typeof left === 'string' && Buffer.byteLength(left) === Buffer.byteLength(right) && timingSafeEqual(Buffer.from(left), Buffer.from(right))
 const commonFields = ['model', 'stream', 'temperature', 'top_p', 'tools', 'tool_choice', 'parallel_tool_calls', 'metadata', 'max_tokens', 'max_output_tokens', 'max_completion_tokens', 'presence_penalty', 'frequency_penalty', 'stop', 'seed', 'n', 'logprobs', 'top_logprobs', 'reasoning_effort', 'reasoning', 'stream_options', 'store', 'service_tier', 'prompt_cache_key', 'prompt_cache_retention']
 const routeFields = {
@@ -26,7 +32,7 @@ const routeFields = {
 function validateBody(body, route, models, defaultModel, cacheScope) {
   if (!object(body) || Object.keys(body).some(key => !routeFields[route].has(key))) fail(400)
   const model = body.model ?? defaultModel
-  if (typeof model !== 'string' || !models.includes(model)) fail(403)
+  if (typeof model !== 'string' || !models.includes(model)) fail(403, 'model_not_allowed')
   if (route === '/images/generations') {
     if (typeof body.prompt !== 'string' || !body.prompt.trim() || body.prompt.length > 12000 || body.n !== undefined && body.n !== 1) fail(400)
     if (body.size !== undefined && !['1024x1024', '1536x1024', '1024x1536'].includes(body.size)) fail(400)
@@ -54,7 +60,7 @@ function validateBody(body, route, models, defaultModel, cacheScope) {
   inspectInput(body.messages ?? body.input)
   const outputField = route === '/responses' ? 'max_output_tokens' : 'max_tokens'
   const hasOutputLimit = ['max_tokens', 'max_output_tokens', 'max_completion_tokens'].some(key => body[key] !== undefined)
-  return { ...body, model, store: false, ...(body.prompt_cache_key ? { prompt_cache_key: cacheScope + ':' + body.prompt_cache_key } : {}), ...(!hasOutputLimit ? { [outputField]: OUTPUT_LIMIT } : {}) }
+  return { ...body, model, store: false, ...(body.prompt_cache_key ? { prompt_cache_key: cacheScope + ':' + body.prompt_cache_key } : {}), ...(!hasOutputLimit ? { [outputField]: defaultOutputLimit(model) } : {}) }
 }
 
 async function readBody(req) {
@@ -70,7 +76,14 @@ async function readBody(req) {
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')) } catch { fail(400) }
 }
 
-const upstreamError = data => object(data) && (Boolean(data.error) || ['error', 'response.failed', 'response.incomplete', 'response.error'].includes(data.type) || object(data.response) && Boolean(data.response.error))
+const upstreamError = data => object(data) && !expectedIncompleteResponse(data) && (Boolean(data.error)
+  || ['error', 'response.failed', 'response.incomplete', 'response.error'].includes(data.type)
+  || ['failed', 'incomplete'].includes((data.response ?? data).status)
+  || object(data.response) && Boolean(data.response.error))
+const chatReceipt = data => Array.isArray(data?.choices) && data.choices.some(choice => object(choice)
+  && (object(choice.message) && (typeof choice.message.content === 'string' || typeof choice.message.refusal === 'string' || Array.isArray(choice.message.tool_calls) && choice.message.tool_calls.length > 0)
+    || object(choice.delta) && (Object.keys(choice.delta).length > 0 || typeof choice.finish_reason === 'string' && choice.finish_reason.length > 0)))
+const responsesReceipt = data => object(data) && ['completed', 'incomplete'].includes(data.status) && Array.isArray(data.output)
 async function boundedResponse(upstream, limit = BODY_LIMIT, progress = () => {}) {
   if (!upstream.body) fail(502)
   const reader = upstream.body.getReader(), chunks = []
@@ -92,17 +105,28 @@ async function write(res, chunk, signal) {
   if (!res.write(chunk)) await once(res, 'drain', { signal })
 }
 
-async function streamResponse(upstream, res, signal, progress) {
+async function streamResponse(upstream, res, signal, progress, redact = [], observe = () => {}) {
   const reader = upstream.body.getReader(), decoder = new TextDecoder()
   let pending = '', completed = false
   const projectEvent = async event => {
     const lines = event.split('\n')
     const dataText = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n')
-    const errorEvent = lines.some(line => /^event:\s*(?:error|response.failed|response.incomplete|response.error)\s*$/.test(line))
+    const eventTypes = lines.filter(line => line.startsWith('event:')).map(line => line.slice(6).trim())
     let data
     if (dataText && dataText !== '[DONE]') { try { data = JSON.parse(dataText) } catch { throw new Error('创作流格式不正确。') } }
-    if (errorEvent || upstreamError(data)) throw upstreamFailure(upstream.status, data)
+    const incomplete = expectedIncompleteResponse(data)
+    const expectedIncomplete = incomplete && data.type === 'response.incomplete' && object(data.response)
+      && eventTypes.every(type => type === 'response.incomplete')
+    const errorEvent = eventTypes.find(type => ['error', 'response.failed', 'response.error'].includes(type)
+      || type === 'response.incomplete' && !expectedIncomplete)
+    if (errorEvent || upstreamError(data) || incomplete && !expectedIncomplete) {
+      const type = errorEvent || eventTypes.at(-1) || data?.type
+      throw upstreamFailure(upstream.status, type ? { ...data, type } : data, { redact })
+    }
+    observe(data)
+    // 长度上限和内容过滤由原生适配器处理，不能改成服务故障或伪装成 completed。
     completed ||= dataText === '[DONE]' || data?.type === 'response.completed'
+      || expectedIncomplete
       || Array.isArray(data?.choices) && data.choices.some(choice => typeof choice.finish_reason === 'string' && choice.finish_reason.length > 0)
     // 不转发供应商的调试注释与事件ID；正常模型JSON保持原文。
     const allowed = lines.filter(line => /^(?:event|data):/.test(line))
@@ -157,6 +181,7 @@ function providerSettings({ baseUrl, apiKey, models, defaultModel, apiMode, imag
 export async function createInferenceBroker({ host = '127.0.0.1', port = 0, unixSocket, providers = [], timeouts, onDiagnostic = row => console.warn('STUDIO_INFERENCE ' + JSON.stringify(row)), ...primary }) {
   if (!['127.0.0.1', '::1', 'localhost'].includes(host)) throw new Error('创作模型监听地址无效。')
   const timeoutSettings = inferenceTimeouts(timeouts)
+  const coverageStartedAt = new Date().toISOString()
   let revision = 1
   let destinations = new Map([['primary', { ...providerSettings({ ...primary, id: 'primary' }), revision }]])
   const activeRequests = new Map()
@@ -179,8 +204,16 @@ export async function createInferenceBroker({ host = '127.0.0.1', port = 0, unix
   const scopes = new Map(), paths = new Map()
   const json = (res, status, data) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); res.end(JSON.stringify(data)) }
   const handler = async (req, res) => {
-    let scope, controller, timer, releaseSlot, deadline, model, providerId, endpoint, began
+    let scope, controller, timer, releaseSlot, deadline, model, providerId, endpoint, began, destination
+    let responseIdHash
+    let validReceipt = false
     const requestId = randomUUID()
+    // 只关联上游响应标识的指纹，供应商正文及原始 ID 不进入诊断。
+    const observeResponse = data => {
+      const id = data?.response?.id ?? (Array.isArray(data?.choices) || data?.object === 'response' ? data?.id : undefined)
+      if (typeof id === 'string' && id && id.length <= 1024) responseIdHash = createHash('sha256').update(id).digest('hex')
+      validReceipt ||= endpoint === '/chat/completions' ? chatReceipt(data) : endpoint === '/responses' && responsesReceipt(data?.response ?? data)
+    }
     try {
       const url = new URL(req.url, 'http://localhost')
       const match = url.pathname.match(/^\/scope\/([A-Za-z0-9_-]{32})\/v1(\/models|\/chat\/completions|\/responses|\/images\/generations)$/)
@@ -188,7 +221,7 @@ export async function createInferenceBroker({ host = '127.0.0.1', port = 0, unix
       const route = paths.get(match[1])
       scope = route?.account
       if (!scope || !equal(req.headers.authorization, 'Bearer ' + scope.token)) fail(401)
-      const destination = destinations.get(route.providerId)
+      destination = destinations.get(route.providerId)
       if (!destination) fail(403)
       if (req.headers.origin || req.headers['sec-fetch-site']) fail(403)
       if (req.method === 'GET' && match[2] === '/models') { json(res, 200, { object: 'list', data: destination.models.map(id => ({ id, object: 'model', owned_by: 'studio' })) }); return }
@@ -216,7 +249,7 @@ export async function createInferenceBroker({ host = '127.0.0.1', port = 0, unix
       began = Date.now()
       deadline = inferenceDeadline(controller, timeoutSettings, imageRequest)
       let target = new URL(upstreamBase); target.pathname = upstreamBase.pathname.replace(/\/+$/, '') + match[2]
-      let payload = body
+      let payload = geminiStructuredRequest(body, match[2], upstreamBase)
       const geminiImage = imageRequest && body.model.startsWith('gemini-')
       if (geminiImage) { const native = geminiImageRequest(upstreamBase, body); target = native.target; payload = native.body }
       const upstream = await fetch(target, { method: 'POST', headers: { authorization: 'Bearer ' + apiKey, 'content-type': 'application/json', accept: body.stream ? 'text/event-stream' : 'application/json' }, body: JSON.stringify(payload), redirect: 'error', signal: controller.signal })
@@ -224,34 +257,47 @@ export async function createInferenceBroker({ host = '127.0.0.1', port = 0, unix
       if (!upstream.ok) {
         let details
         try { details = JSON.parse(await boundedResponse(upstream, 16384, deadline.progress)) } catch { details = null }
-        if (upstream.status === 429) {
-          const delay = Number(upstream.headers.get('retry-after'))
+        const admission = admissionRetryAfter(upstream.status, details)
+        if (upstream.status === 429 || admission !== null) {
+          const delay = Number(upstream.headers.get('retry-after')) || admission
           res.setHeader('Retry-After', String(Number.isFinite(delay) && delay > 0 ? Math.min(120, Math.ceil(delay)) : 5))
-          throw upstreamFailure(429, details)
+          throw upstreamFailure(429, details, { redact: [apiKey] })
         }
-        throw upstreamFailure(upstream.status, details)
+        throw upstreamFailure(upstream.status, details, { redact: [apiKey] })
       }
       if (body.stream) {
         if (!upstream.headers.get('content-type')?.startsWith('text/event-stream') || !upstream.body) { await upstream.body?.cancel(); fail(502) }
         res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
-        await streamResponse(upstream, res, controller.signal, deadline.progress); res.end()
+        await streamResponse(upstream, res, controller.signal, deadline.progress, [apiKey], observeResponse); res.end()
       } else {
         const text = await boundedResponse(upstream, imageRequest ? 36 * 1024 * 1024 : BODY_LIMIT, deadline.progress)
         let data; try { data = JSON.parse(text) } catch { fail(502) }
-        if (upstreamError(data)) throw upstreamFailure(upstream.status, data)
+        if (upstreamError(data)) throw upstreamFailure(upstream.status, data, { redact: [apiKey] })
+        observeResponse(data)
         if (imageRequest) {
           if (geminiImage) data = geminiImageData(data)
           const encoded = data.data?.[0]?.b64_json
           if (typeof encoded !== 'string' || !encoded || encoded.length > 34 * 1024 * 1024) fail(502)
+          validReceipt = true
           json(res, 200, { data: [{ b64_json: encoded }] })
         } else json(res, 200, data)
       }
+      const observation = { schemaVersion: 2, coverageStartedAt, requestId, account: scope.profile, model, providerId, route: endpoint,
+        elapsedMs: Date.now() - began, timestamp: new Date().toISOString(), ...(responseIdHash ? { responseIdHash } : {}) }
+      // 转发兼容原有协议处理；HTTP 200 空对象或空流不能提升为权威成功。
+      onDiagnostic(validReceipt ? { event: 'studio.inference.success', ...observation }
+        : inferenceDiagnostic(inferenceError(502, 'provider_unavailable', 200), observation))
     } catch (error) {
       if (controller?.signal.aborted && controller.signal.reason?.code) error = controller.signal.reason
-      if (!error.status && error.name === 'TypeError') error = inferenceError(502, 'provider_connection_failed')
+      if (!error.status && error.name === 'TypeError') error = inferenceError(502, 'provider_connection_failed', undefined, transportCause(error, [destination?.apiKey]))
+      if (!began && typeof error.code === 'string' && (error.code.startsWith('request_') || error.code === 'model_not_allowed')) {
+        onDiagnostic({ event: 'studio.inference.rejected', schemaVersion: 2, coverageStartedAt, requestId,
+          ...(scope ? { account: scope.profile } : {}), phase: 'validation', status: error.status,
+          code: error.code, timestamp: new Date().toISOString() })
+      }
       if (began && (error.status || !controller?.signal.aborted)) {
         // 诊断只输出固定字段；上游错误正文、请求内容、地址和凭据不写入日志。
-        onDiagnostic(inferenceDiagnostic(error, { requestId, account: scope.profile, model, providerId, route: endpoint,
+        onDiagnostic(inferenceDiagnostic(error, { schemaVersion: 2, coverageStartedAt, requestId, account: scope.profile, model, providerId, route: endpoint,
           phase: deadline?.phase, elapsedMs: Date.now() - began, timestamp: new Date().toISOString() }))
       }
       if (res.destroyed) return

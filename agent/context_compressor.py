@@ -956,33 +956,6 @@ _LEAN_RECOVERY_HEADING = "## Context Recovery"
 _LEAN_TAIL_KEEP_TOOL_ROUNDS = 6
 _LEAN_TAIL_DEMOTE_MIN_CHARS = 1_500
 
-# User requirements are a separate deterministic ledger because the summary LLM is allowed to
-# paraphrase ordinary history.  A forgotten word count, language, format, or output limit changes
-# the contract of the current task even when the surrounding goal is preserved.  Keep this ledger
-# deliberately small and source-bound: only real user rows can add entries, and later user wording
-# is listed after earlier wording so a conflict has an unambiguous recency rule.
-_PERSISTENT_REQUIREMENTS_HEADING = "## Persistent User Requirements"
-_PERSISTENT_REQUIREMENTS_LEDGER_MARKER = "<!-- hermes-persistent-user-requirements:v1 -->"
-_PERSISTENT_REQUIREMENTS_MAX_CHARS = 16_000
-_PERSISTENT_REQUIREMENTS_MAX_ENTRIES = 32
-_PERSISTENT_REQUIREMENT_MAX_CHARS = 500
-_PERSISTENT_REQUIREMENT_MARKER_RE = re.compile(
-    r"(?:必须|须要|不得|不能|不可|禁止|只能|只可|至少|不超过|不多于|不低于|不少于|不要|请不要|要求|规定|限制|固定|保持|统一|始终|持续|后续|每(?:次|集|轮|条|章|篇|段|句)|都要|均要|务必|请勿|所有|任何|must(?:\s+not)?|do\s+not|never|always|every|each|at\s+least|at\s+most|no\s+more\s+than|no\s+less\s+than|required|keep|only)",
-    re.IGNORECASE,
-)
-_PERSISTENT_REQUIREMENT_CANCEL_RE = re.compile(
-    r"(?:取消|撤销|不再|无需|不用|去掉|删除|放宽|解除|恢复|重新启用|重新提出|ignore|no\s+longer|stop\s+using|drop)",
-    re.IGNORECASE,
-)
-_PERSISTENT_REQUIREMENT_SCOPE_RE = re.compile(
-    r"(?:字|字符|词|集|章|篇|段|句|正文|格式|语言|中文|英文|输出|回复|返回|文件|受众|角色|时长|数量|条|项|秒|分钟|word|words|character|characters|episode|episodes|format|language|output|response|file|audience|role|duration|count)",
-    re.IGNORECASE,
-)
-_PERSISTENT_REQUIREMENT_SECTION_RE = re.compile(
-    rf"(?ms)^{re.escape(_PERSISTENT_REQUIREMENTS_HEADING)}\s*\n(?P<body>.*?)(?=^## |\Z)"
-)
-
-
 def _lean_recovery_stub(tool_name: str, content_len: int, session_id: str) -> str:
     """One-line replacement for a demoted tail tool result."""
     hint = f" Recover with session_search(query=..., session_id='{session_id}')" if session_id else ""
@@ -1033,145 +1006,6 @@ def _build_verbatim_user_section(turns: List[Dict[str, Any]]) -> str:
         "verbatim. These are the user's actual words and override any "
         "paraphrase of them above.)"
     )
-
-
-def _persistent_requirement_clauses(text: str) -> list[str]:
-    """Extract short requirement-like clauses from one user message.
-
-    This is intentionally a high-precision heuristic.  It records a clause only when it contains
-    an explicit obligation/limit marker and either a recognizable output scope or a short complete
-    clause.  The original wording is retained (after secret redaction) so values such as ``1000``
-    cannot be rounded away by a later summary rewrite.
-    """
-    text = _redact_compaction_text(text).strip()
-    if not text:
-        return []
-    clauses: list[str] = []
-    # Newlines and Chinese/ASCII punctuation are useful boundaries; splitting at commas lets a
-    # single long request contribute its format and word-count rules independently.
-    for line in re.split(r"\n+", text):
-        for raw in re.split(r"(?<=[。！？!?；;，,])\s*", line):
-            clause = re.sub(r"\s+", " ", raw).strip(" \t,，;；")
-            if not clause or len(clause) < 4:
-                continue
-            if len(clause) > _PERSISTENT_REQUIREMENT_MAX_CHARS:
-                clause = elide(clause, _PERSISTENT_REQUIREMENT_MAX_CHARS)
-            has_requirement_marker = bool(_PERSISTENT_REQUIREMENT_MARKER_RE.search(clause))
-            has_cancel_marker = bool(_PERSISTENT_REQUIREMENT_CANCEL_RE.search(clause))
-            if not (has_requirement_marker or has_cancel_marker):
-                continue
-            has_scope = bool(_PERSISTENT_REQUIREMENT_SCOPE_RE.search(clause))
-            has_numeric_limit = bool(re.search(r"\d|[一二三四五六七八九十百千万亿]+", clause))
-            if not (has_scope or has_numeric_limit or len(clause) <= 180):
-                continue
-            if clause not in clauses:
-                clauses.append(clause)
-    return clauses
-
-
-_STUDIO_USER_MESSAGE_MARKER = "\n\n【用户本轮消息】\n"
-_STUDIO_WRAPPER_HEAD = "【本轮语言偏好】"
-
-
-def _user_authored_requirement_text(text: Any) -> str:
-    """Return only the user-authored portion of a Studio-wrapped prompt.
-
-    Studio sends a long per-turn protocol followed by a marked user body.  The protocol is
-    model context, not a user requirement.  Parse the known wrapper boundary when present and
-    leave ordinary CLI/native messages unchanged.  Splitting only once also preserves a marker
-    that a user intentionally typed inside their own message as data.
-    """
-    if not isinstance(text, str):
-        return ""
-    if text.startswith(_STUDIO_WRAPPER_HEAD) and _STUDIO_USER_MESSAGE_MARKER in text:
-        return text.split(_STUDIO_USER_MESSAGE_MARKER, 1)[1]
-    return text
-
-
-def _persistent_requirement_entries(summary: str) -> list[str]:
-    """Read entries only from a deterministic ledger emitted by this runtime.
-
-    A summary model can repeat the human-readable heading and bullets, so the private marker is
-    required before any historical entry is trusted.  Current model output is never parsed here.
-    """
-    match = _PERSISTENT_REQUIREMENT_SECTION_RE.search(summary or "")
-    if not match or _PERSISTENT_REQUIREMENTS_LEDGER_MARKER not in match.group("body"):
-        return []
-    entries: list[str] = []
-    for line in match.group("body").splitlines():
-        line = line.strip()
-        if not line.startswith(("- ", "* ")):
-            continue
-        value = re.sub(r"^[*-]\s+", "", line).strip()
-        # Canonical labels are presentation metadata; the user wording after the label is the key.
-        value = re.sub(r"^\[[^\]]+\]\s*", "", value)
-        if value and value not in entries:
-            entries.append(value)
-    return entries
-
-
-def _persistent_requirement_key(value: str) -> str:
-    """Normalize one requirement enough to match cancellation and reassertion wording."""
-    value = re.sub(r"\s+", "", value or "").lower()
-    value = re.sub(r"[。！？!?；;，,、：:（）()\[\]【】‘’“”\"'`]+", "", value)
-    value = _PERSISTENT_REQUIREMENT_CANCEL_RE.sub("", value)
-    value = re.sub(r"(?:的)?(?:要求|限制)", "", value)
-    value = re.sub(r"(?:必须|须要|务必|请务必|must|should|required|always|only)", "", value, flags=re.IGNORECASE)
-    return value
-
-
-def _persistent_requirement_is_high_priority(value: str) -> bool:
-    """Keep explicit numeric and cancellation clauses when the bounded ledger is full."""
-    return bool(re.search(
-        r"\d|不少于|不低于|至少|不超过|不多于|至多|取消|撤销|不再|无需|不用|no\\s+more|no\\s+less|at\\s+least|at\\s+most",
-        value or "", re.IGNORECASE,
-    ))
-
-
-def _bound_persistent_requirement_entries(entries: list[str]) -> list[str]:
-    """Bound the ledger without evicting explicit limits or its newest entry."""
-    if len(entries) <= _PERSISTENT_REQUIREMENTS_MAX_ENTRIES:
-        return entries
-    selected: list[str] = []
-
-    def add(value: str) -> None:
-        if value not in selected:
-            selected.append(value)
-
-    for value in entries[:8]:
-        add(value)
-    for value in entries:
-        if _persistent_requirement_is_high_priority(value):
-            add(value)
-    for value in entries[-_PERSISTENT_REQUIREMENTS_MAX_ENTRIES:]:
-        add(value)
-    if len(selected) > _PERSISTENT_REQUIREMENTS_MAX_ENTRIES:
-        protected = [value for value in selected if _persistent_requirement_is_high_priority(value)]
-        newest = entries[-1]
-        middle = [value for value in selected if value not in protected and value != newest]
-        selected = protected + middle[:max(0, _PERSISTENT_REQUIREMENTS_MAX_ENTRIES - len(protected) - 1)]
-        add_newest = newest not in selected
-        if add_newest:
-            selected.append(newest)
-    return selected[:_PERSISTENT_REQUIREMENTS_MAX_ENTRIES]
-
-
-def _persistent_requirements_section(entries: list[str]) -> str:
-    """Render a bounded, deterministic requirement ledger."""
-    if not entries:
-        return ""
-    lines = [
-        _PERSISTENT_REQUIREMENTS_HEADING,
-        _PERSISTENT_REQUIREMENTS_LEDGER_MARKER,
-        "These entries come only from real user-authored messages and are kept verbatim. "
-        "They are historical constraints for the current task, not a new task or instruction "
-        "to resume old work. Apply them when the latest request is in the same task; if the "
-        "user changes or cancels one, the later entry wins.",
-    ]
-    for index, entry in enumerate(entries, start=1):
-        age = "较早" if index < len(entries) else "最新，优先级最高"
-        lines.append(f"- [用户原话 {index}，{age}] {entry}")
-    return "\n".join(lines)
 
 
 def _build_recovery_footer(session_id: str, region_len: int) -> str:
@@ -3805,7 +3639,6 @@ Summary generation was unavailable, so this is a best-effort deterministic fallb
         summary = elide(summary, _FALLBACK_SUMMARY_MAX_CHARS)
         # Re-inject AFTER the size cap: markers live at the end, where truncation cuts.
         summary = _reinject_pruned_skill_markers(summary, _pruned_names)
-        summary = self._augment_persistent_user_requirements(summary, turns_to_summarize)
         return self._augment_summary_lean(summary, turns_to_summarize)
 
     def _demote_stale_tail_tools(self, messages: List[Dict[str, Any]], tail_start: int) -> List[Dict[str, Any]]:
@@ -3848,51 +3681,6 @@ Summary generation was unavailable, so this is a best-effort deterministic fallb
             if heading not in summary:
                 summary += build()
         return summary
-
-    def _augment_persistent_user_requirements(
-        self, summary: str, turns_to_summarize: List[Dict[str, Any]],
-    ) -> str:
-        """Carry user-authored hard requirements across every summary rewrite.
-
-        The LLM still summarizes the normal sections, but this ledger is rebuilt from the prior
-        ledger plus the current real user rows after the LLM returns.  That makes the guarantee
-        independent of whether the auxiliary model remembers to copy a word count or output limit.
-        """
-        entries: list[str] = []
-        # Only a ledger emitted by this runtime carries the private marker.  Never parse the current
-        # model response: its same-named section is untrusted transcript prose, not user provenance.
-        for entry in _persistent_requirement_entries(getattr(self, "_previous_summary", "") or ""):
-            if entry not in entries:
-                entries.append(entry)
-        for message in turns_to_summarize:
-            if not isinstance(message, dict) or message.get("role") != "user":
-                continue
-            # Use the same synthetic-row predicate as summary provenance.  A runtime continuation,
-            # compaction handoff, or todo injection must never become a user requirement.
-            if self._is_synthetic_compression_user_turn(message):
-                continue
-            content = _user_authored_requirement_text(_content_text_for_contains(message.get("content")))
-            for entry in _persistent_requirement_clauses(content):
-                key = _persistent_requirement_key(entry)
-                if not key:
-                    continue
-                # A later cancellation or reassertion supersedes the previous wording for the
-                # same requirement. Keep the latest user-authored row at the end of the ledger.
-                entries = [old for old in entries if _persistent_requirement_key(old) != key]
-                entries.append(entry)
-        # Strip an untrusted model-authored section even when no real requirement was found.  Leaving
-        # it in the handoff would let the next model treat ordinary summary prose as a user contract.
-        body = _PERSISTENT_REQUIREMENT_SECTION_RE.sub("", summary or "").rstrip()
-        if not entries:
-            return body
-
-        # Keep the first entries (which often contain the original contract) and the newest entries
-        # when a very long session has accumulated more than the bounded ledger can carry.
-        entries = _bound_persistent_requirement_entries(entries)
-        while len(_persistent_requirements_section(entries)) > _PERSISTENT_REQUIREMENTS_MAX_CHARS and len(entries) > 1:
-            del entries[8 if len(entries) > 8 else 0]
-        section = _persistent_requirements_section(entries)
-        return f"{body}\n\n{section}" if body else section
 
     @classmethod
     def _bound_summary_input(cls, content: str) -> str:
@@ -4228,7 +4016,6 @@ Summary generation was unavailable, so this is a best-effort deterministic fallb
             # See #32106.
             summary = _reinject_pruned_skill_markers(summary, _pruned_skill_names)
             summary = self._ground_historical_task_snapshot(summary, turns_to_summarize)
-            summary = self._augment_persistent_user_requirements(summary, turns_to_summarize)
             summary = self._augment_summary_lean(summary, turns_to_summarize)
             self._validate_summary_user_provenance(summary, has_user_turn)
             # A detached stale attempt must not publish its late summary onto shared compressor state:
@@ -4335,13 +4122,6 @@ This compaction should PRIORITISE preserving all information related to the focu
 
 ## Constraints & Preferences
 {_section["constraints"]}
-
-{_PERSISTENT_REQUIREMENTS_HEADING}
-[The runtime preserves explicit user requirements such as word counts, output limits,
-language, format, audience, and repeated workflow rules in this section after generation.
-This is historical constraint context for the current task, not a new task to resume.
-Do not invent entries. If the user later changes or cancels a requirement, keep the newer
-wording after the older wording so the newer request wins.]
 
 ## Completed Actions
 [Numbered list of concrete actions taken — include tool used, target, and outcome.

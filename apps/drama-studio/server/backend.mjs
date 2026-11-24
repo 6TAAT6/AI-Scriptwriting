@@ -209,13 +209,43 @@ export class StudioBackend {
       state.switchingModel = true
     }
     if (call.method === 'prompt.submit') {
-      if (state) { state.running = true; state.submitting = true }
+      if (state?.running || state?.submitting || state?.selectingImage) fail(409, '本轮尚未结束，请等待完成后再发送。')
+      if (state) { state.running = true; state.submitting = true; state.submissionAccepted = false; state.turnRevision = (state.turnRevision || 0) + 1 }
     }
+  }
+  async prepareRequest(call, readNative, readContinuation) {
+    if (call.method !== 'prompt.submit') return
+    const state = this.runtimeStates.get(call.params?.session_id)
+    if (!state?.running || !state.submissionAccepted || !state.storedSessionId) return
+    const revision = state.turnRevision
+    const result = await readNative('session.active_list')
+    if (!Array.isArray(result.sessions)) fail(503, '暂时无法核对创作状态，请稍后重试。')
+    const rows = result.sessions.filter(row => row.id === call.params.session_id)
+    if (rows.length !== 1 || rows[0].status !== 'idle') return
+    if (rows[0].session_key !== state.storedSessionId) {
+      if (!validSessionId(rows[0].session_key) || !readContinuation) return
+      const chain = await readContinuation(state.storedSessionId)
+      if (chain?.requested_session_id !== state.storedSessionId || !Array.isArray(chain.path)
+        || chain.path[0] !== state.storedSessionId || !chain.path.includes(rows[0].session_key)
+        || chain.path.at(-1) !== chain.session_id || !chain.path.every(validSessionId)) return
+      const checked = await readNative('session.active_list')
+      if (!Array.isArray(checked.sessions) || !checked.sessions.some(row => row.id === call.params.session_id
+        && row.session_key === rows[0].session_key && row.status === 'idle')) return
+    }
+    const delegated = await readNative('delegation.status')
+    if (!Array.isArray(delegated.active)) fail(503, '暂时无法核对子任务状态，请稍后重试。')
+    if (delegated.active.length || this.runtimeStates.get(call.params.session_id) !== state || state.turnRevision !== revision) return
+    // 同一上游连接上的新鲜空闲回执排在既有完成事件之后；不凭计时器解锁。
+    state.running = false; state.submitting = false; state.submissionAccepted = false
+    state.turnRevision = (state.turnRevision || 0) + 1
   }
   async noteReply(call, frame, user) {
     const state = this.runtimeStates.get(call.params?.session_id)
     if (!state) return
-    if (call.method === 'prompt.submit' && frame.error) { state.running = false; state.submitting = false }
+    if (call.method === 'prompt.submit') {
+      state.submissionAccepted = !frame.error
+      if (frame.error) { state.running = false; state.submitting = false; state.turnRevision = (state.turnRevision || 0) + 1 }
+    }
     if (call.method === 'config.set' && call.params.key === 'model') {
       state.switchingModel = false
       if (!frame.error && frame.result?.info) Object.assign(state, frame.result.info, { modelDisplaySlot: this.requestModelSlots.get(call) })
@@ -227,10 +257,11 @@ export class StudioBackend {
     const event = frame.method === 'event' ? frame.params : null
     const state = event && this.runtimeStates.get(event.session_id)
     if (!state) return
-    if (event.type === 'message.start') { state.running = true; state.submitting = false }
-    if (event.type === 'message.complete' || event.type === 'error') { state.running = false; state.submitting = false }
+    if (event.type === 'message.start') { state.running = true; state.submitting = false; state.turnRevision = (state.turnRevision || 0) + 1 }
+    if (event.type === 'message.complete' || event.type === 'error') { state.running = false; state.submitting = false; state.submissionAccepted = false; state.turnRevision = (state.turnRevision || 0) + 1 }
     if (event.type === 'session.info') {
       const info = event.payload || {}
+      if (info.model && state.model && info.model !== state.model) delete state.modelDisplaySlot
       Object.assign(state, info, state.submitting && info.running === false ? { running: true } : {})
     }
   }
@@ -260,6 +291,7 @@ export class StudioBackend {
 export const RPC_FIELDS = {
   'gateway.ping': [],
   'client.capabilities': ['server_requests', 'declines_not_shown'],
+  'session.active_list': ['profile'],
   'session.list': ['profile', 'limit', 'include_hidden', 'offset', 'source', 'title', 'archived'],
   'model.options': ['profile', 'explicit_only', 'include_unconfigured'],
   'config.set': ['profile', 'session_id', 'key', 'value', 'scope'],
@@ -282,6 +314,11 @@ export async function authorizeRpc(frame, user, backend) {
   backend.requireEmployeeChannel(user)
   const out = { ...params }
   if (fields.includes('profile')) out.profile = user.profile
+  if (frame.method === 'session.create' && backend.modelNames && !out.model) {
+    out.model = backend.modelNames.defaultModel(user, backend.catalogs.get(user.id))
+    if (!out.model) fail(503, '模型目录尚未就绪，请刷新后重试。')
+  }
+  const createModelSlot = out.model
   const decodeModel = (kind, selection) => backend.modelNames?.selection(user, backend.catalogs.get(user.id), kind, selection) || selection
   if (frame.method === 'session.create') Object.assign(out, decodeModel('text', out))
   if (frame.method === 'config.set' && out.key === 'model' && out.value && typeof out.value === 'object' && !Array.isArray(out.value)) out.value = decodeModel('text', out.value)
@@ -292,6 +329,8 @@ export async function authorizeRpc(frame, user, backend) {
   if (frame.method === 'session.resume') {
     // 仅凭本账号已验证的创建回执，允许断线后恢复尚未首轮落盘的上传会话。
     if (!backend.ownsFreshSession(user, params.session_id)) await backend.session(user, params.session_id)
+    // 创作续聊必须恢复并校验历史模型；子代理观察模式不能用于跳过模型重选。
+    out.lazy = false
   }
   else if (fields.includes('session_id')) backend.ownRuntime(user, params.session_id)
   if (frame.method === 'config.set') {
@@ -325,7 +364,7 @@ export async function authorizeRpc(frame, user, backend) {
     if (isImageFile(out.name)) validateImageUpload(out.data_url, out.name)
   }
   const call = { ...frame, params: out }
-  const slot = frame.method === 'session.create' ? params.model : frame.method === 'config.set' && params.key === 'model' ? params.value?.model : undefined
+  const slot = frame.method === 'session.create' ? createModelSlot : frame.method === 'config.set' && params.key === 'model' ? params.value?.model : undefined
   if (backend.modelNames && typeof slot === 'string') backend.requestModelSlots.set(call, slot)
   return call
 }

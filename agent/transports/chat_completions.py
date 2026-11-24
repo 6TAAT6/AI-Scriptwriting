@@ -11,12 +11,13 @@ from urllib.parse import urlparse
 from agent.lmstudio_reasoning import resolve_lmstudio_effort
 from agent.reasoning_effort import (
     KIMI_K3_EFFORTS, KIMI_K3_OVERRIDES, OPENAI_COMPAT_WIRE_EFFORTS, TOKENHUB_EFFORTS, clamp_effort,
-    clamp_reasoning_config, kimi_supported_efforts, requested_effort,
+    clamp_reasoning_config, kimi_supported_efforts, model_id_encodes_reasoning_effort, requested_effort,
 )
 from agent.message_metadata import MESSAGE_UID
 from agent.message_sanitization import normalize_finish_reason as _normalize_finish_reason
 from agent.moonshot_schema import is_moonshot_model, sanitize_moonshot_tools
 from agent.prompt_builder import DEVELOPER_ROLE_MODELS
+from agent.relay_prompt_compat import localize_relay_sensitive_guidance
 from agent.transports.base import ProviderTransport
 from agent.transports.types import NormalizedResponse, ToolCall, Usage
 
@@ -480,6 +481,8 @@ class ChatCompletionsTransport(ProviderTransport):
         """
         _profile = params.get("provider_profile")
         sanitized = self.convert_messages(messages, model=model, base_url=params.get("base_url"), provider_profile=_profile)
+        # Gemini relays answer 429 to a few stock English guidance paragraphs; send them in Chinese.
+        sanitized = localize_relay_sensitive_guidance(sanitized, model)
         if _profile:
             return self._build_kwargs_from_profile(_profile, model, sanitized, tools, params)
 
@@ -587,6 +590,15 @@ class ChatCompletionsTransport(ProviderTransport):
                 extra_body.update(v)
             else:
                 api_kwargs[k] = v
+
+        if model_id_encodes_reasoning_effort(model):
+            explicit_effort = requested_effort(reasoning_config)
+            if explicit_effort:
+                api_kwargs["reasoning_effort"] = clamp_effort(explicit_effort, OPENAI_COMPAT_WIRE_EFFORTS)
+            else:
+                api_kwargs.pop("reasoning_effort", None)
+            if isinstance(extra_body, dict):
+                extra_body.pop("reasoning", None)
 
         if extra_body:
             # Native Gemini speaks Google's REST schema: OpenAI-style extra_body

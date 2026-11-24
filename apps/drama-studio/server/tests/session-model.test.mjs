@@ -73,7 +73,7 @@ test('真实连接使用原生会话模型切换，确认前拒绝发送，失�
     const on = raw => { const frame = JSON.parse(raw); if (frame.id === id) { clearTimeout(timer); socket.off('message', on); resolve(frame) } }
     socket.on('message', on); socket.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }))
   })
-  await rpc('session.create'); await rpc('model.options')
+  await rpc('model.options'); await rpc('session.create')
   const changing = rpc('config.set', { session_id: 'live', key: 'model', scope: 'session', value: { model: 'brand-text-2', provider: 'jubao-models', reasoning_effort: 'high' } })
   // 同一 WebSocket 的请求按序处理，ping 回执证明前一条设置已进入原生后端。
   await rpc('gateway.ping')

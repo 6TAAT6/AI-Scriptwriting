@@ -11,7 +11,7 @@ beforeEach(() => {
   workspace.session.set({ storedId: '', runtimeId: '', info: { model: 'model-alpha', provider: 'primary' } })
   workspace.models.set({ providers: [
     { slug: 'primary', name: '主服务', models: ['model-alpha', 'model-beta'] },
-    { slug: 'secondary', name: '备用服务', models: ['model-beta'], display_names: { 'model-beta': '团队备用版' } }
+    { slug: 'secondary', name: '备用服务', models: ['model-beta'] }
   ] })
   workspace.composer.set({ text: '', region: '中国', language: '中英双语', attachments: [], busy: false })
   workspace.conversation.set({ runtimeId: '', entries: [], running: false, error: '' })
@@ -51,12 +51,18 @@ test('截图粘贴只添加一次附件，保留文字草稿；断线粘贴给�
   expect(textPaste.defaultPrevented).toBe(false)
 })
 
-test('模型菜单直接显示全部选项，键盘选择保留模型所属服务', () => {
+test('输入区不重复显示发送和文件拖入提示', () => {
+  render(<Composer />)
+  expect(screen.queryByText('Enter 发送 · Shift + Enter 换行')).toBeNull()
+  expect(screen.queryByText('可粘贴截图或拖入文件')).toBeNull()
+})
+
+test('模型键盘选择保留同名模型所属的服务', () => {
   render(<Composer />)
   fireEvent.click(screen.getByRole('combobox', { name: '创作模型' }))
-  expect(screen.queryByRole('searchbox')).toBeNull()
-  expect(screen.getAllByRole('option')).toHaveLength(3)
+  // 模型数量少，菜单不再提供搜索；两个服务都有 model-beta，选中最后一项必须保留备用服务的路由。
   const list = screen.getByRole('listbox', { name: '创作模型' })
+  expect(screen.getAllByRole('option')).toHaveLength(3)
   fireEvent.keyDown(list, { key: 'End' })
   fireEvent.keyDown(list, { key: 'Enter' })
   expect(workspace.session.get().info).toMatchObject({ model: 'model-beta', provider: 'secondary' })
@@ -76,8 +82,8 @@ test('统一选择菜单支持退出、点击外部关闭以及任务参数选�
   expect(screen.queryByRole('listbox')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '创作设置' }))
   fireEvent.click(screen.getByRole('combobox', { name: '故事地区' }))
-  fireEvent.click(screen.getByRole('option', { name: '欧美' }))
-  expect(workspace.composer.get().region).toBe('欧美')
+  fireEvent.click(screen.getByRole('option', { name: '北美' }))
+  expect(workspace.composer.get().region).toBe('北美')
 })
 
 test('思考强度只提供当前模型声明的档位，切换模型清除不兼容的选择', () => {
@@ -98,22 +104,38 @@ test('思考强度只提供当前模型声明的档位，切换模型清除不�
 
 test('模型菜单展示文字与生图分类，选择图片模型保留对话文字模型并启用生图', () => {
   workspace.models.set({ model: 'gpt-6-astra', provider: 'gpt', providers: [
-    { slug: 'gpt', aliases: ['custom:gpt'], name: '内部服务名', models: ['gpt-6-astra'], display_names: { 'gpt-6-astra': '巨豹测试版 V2.0' }, image_models: ['gpt-image-2'] },
-    { slug: 'gemini', name: '内部代理', models: ['gemini-3.1-pro-low'], image_models: ['gemini-3.1-flash-image'], image_display_names: { 'gemini-3.1-flash-image': '巨豹生图 V2.0' } }
+    { slug: 'gpt', aliases: ['custom:gpt'], name: '内部服务名', models: ['gpt-6-astra'], image_models: ['gpt-image-2'] },
+    { slug: 'gemini', name: '内部代理', models: ['gemini-3.1-pro-low'], image_models: ['gemini-3.1-flash-image'] }
   ] })
   workspace.session.set({ storedId: '', runtimeId: '', info: {} })
   render(<Composer />)
   fireEvent.click(screen.getByRole('combobox', { name: '创作模型' }))
-  expect(screen.getAllByText('文字模型').length).toBeGreaterThan(1)
-  expect(screen.getAllByText('生图模型').length).toBeGreaterThan(1)
-  fireEvent.click(screen.getByRole('option', { name: '巨豹生图 V2.0' }))
+  expect(screen.getAllByText('文字模型')).toHaveLength(1)
+  expect(screen.getAllByText('生图模型')).toHaveLength(1)
+  // 测试目录未提供显示名映射，按用途依次显示为“巨豹创作模型 N / 巨豹生图模型 N”。
+  fireEvent.click(screen.getByRole('option', { name: '巨豹生图模型 2' }))
   expect(workspace.composer.get()).toMatchObject({ imageModel: { provider: 'gemini', model: 'gemini-3.1-flash-image' } })
   expect(workspace.session.get().info.model).not.toBe('gemini-3.1-flash-image')
   act(() => workspace.session.set({ storedId: 'saved', runtimeId: 'live', info: { model: 'gpt-6-astra', provider: 'custom:gpt' } }))
   fireEvent.click(screen.getByRole('combobox', { name: '创作模型' }))
-  fireEvent.click(screen.getByRole('option', { name: '巨豹测试版 V2.0' }))
+  fireEvent.click(screen.getByRole('option', { name: '巨豹创作模型 1' }))
   expect(workspace.composer.get().imageModel).toBeUndefined()
   expect(workspace.session.get().info.model).toBe('gpt-6-astra')
+})
+
+test('模型下拉只在分组标题显示用途，选中项的展开图标紧贴模型名称', () => {
+  workspace.models.set({ providers: [
+    { slug: 'gpt', name: '内部代理名', models: ['gpt-6-astra'], image_models: ['gpt-image-2'],
+      display_names: { 'gpt-6-astra': '巨豹测试版 V2.0' }, image_display_names: { 'gpt-image-2': '巨豹生图 V1' } },
+  ] })
+  render(<Composer />)
+  const trigger = screen.getByRole('combobox', { name: '创作模型' })
+  fireEvent.click(trigger)
+  expect(screen.getAllByText('文字模型')).toHaveLength(1)
+  expect(screen.getAllByText('生图模型')).toHaveLength(1)
+  expect(screen.getByRole('option', { name: '巨豹测试版 V2.0' }).querySelector('.select-menu-badge')).toBeNull()
+  expect(trigger.querySelector('.select-menu-badge')).toBeNull()
+  expect(trigger.querySelector('.select-menu-chevron')).toBeTruthy()
 })
 
 test('停止后的对话可直接选择其他文字模型，确认前按钮等待且原稿保持', async () => {
@@ -127,12 +149,12 @@ test('停止后的对话可直接选择其他文字模型，确认前按钮等�
   workspace.editComposer({ text: '接着修改原来的剧本' })
   render(<Composer />)
   fireEvent.click(screen.getByRole('combobox', { name: '创作模型' }))
-  const option = screen.getByRole('option', { name: '团队备用版' })
+  const option = screen.getByRole('option', { name: '巨豹创作模型 3' })
   expect(option.getAttribute('aria-disabled')).not.toBe('true')
   fireEvent.click(option)
   expect(screen.getByRole('button', { name: '发送消息' })).toHaveProperty('disabled', true)
   await act(async () => finish({ key: 'model', value: 'model-beta', info: { model: 'model-beta', provider: 'secondary' } }))
-  expect(screen.getByRole('combobox', { name: '创作模型' }).textContent).toContain('团队备用版')
+  expect(screen.getByRole('combobox', { name: '创作模型' }).textContent).toContain('巨豹创作模型 3')
   expect(workspace.session.get().storedId).toBe('saved')
   expect(workspace.composer.get().text).toBe('接着修改原来的剧本')
   expect(workspace.conversation.get().entries[0].text).toBe('已上传原稿')

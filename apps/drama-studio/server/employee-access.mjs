@@ -13,7 +13,8 @@ function actorFor(store, auth) {
 }
 
 function copyUser(user) {
-  return user ? { id: user.id, username: user.username, display_name: user.display_name, role: user.role, profile: user.profile } : null
+  return user ? { id: user.id, username: user.username, display_name: user.display_name, role: user.role, profile: user.profile,
+    ...(user.organization_policy ? { organization: user.organization, organization_policy: true } : {}) } : null
 }
 
 export class EmployeeAccess {
@@ -37,15 +38,18 @@ export class EmployeeAccess {
   }
 
   async mutate(auth, apply) {
+    await this.store.verifyActor(auth)
     actorFor(this.store, auth)
     return this.store.serialize(async () => {
+      await this.store.verifyActor(auth)
       actorFor(this.store, auth)
       const rows = structuredClone(this.assignments)
       const result = await apply(rows, this.store.requireActor(auth))
-      this.store.requireActor(auth)
+      await this.store.verifyActor(auth)
       const temp = `${this.file}.${randomUUID()}.tmp`
       try {
         await writeFile(temp, JSON.stringify({ version: 1, assignments: rows }), { mode: 0o600, flag: 'wx' })
+        await this.store.verifyActor(auth)
         await rename(temp, this.file)
       } catch (error) {
         await rm(temp, { force: true })
@@ -84,6 +88,7 @@ export class EmployeeAccess {
     const existing = this.assignments.find(row => row.createdBy === actor.id && row.employeeId === employee.id)
     if (existing) return { ...existing, employee: copyUser(employee) }
     return this.mutate(auth, rows => {
+      this.employee(employeeId)
       const assignment = { id: randomUUID(), employeeId: employee.id, createdBy: actor.id, createdAt: new Date().toISOString() }
       rows.push(assignment)
       return { ...assignment, employee: copyUser(employee) }
@@ -127,7 +132,9 @@ export class EmployeeAccess {
         try { return { ...assignment, sessions: await this.sessions(actor, assignment.employee) } }
         catch { return { ...assignment, sessions: [], sync_error: '该员工工作区暂时无法同步，系统会自动重试。' } }
       }))
-      res.statusCode = 200; res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.end(JSON.stringify({ groups })); return true
+      await this.store.verifyActor(auth)
+      const allowed = new Set(this.list(auth).map(row => row.employeeId))
+      res.statusCode = 200; res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.end(JSON.stringify({ groups: groups.filter(group => allowed.has(group.employeeId)) })); return true
     }
     if (url.pathname === '/studio/employee-conversations' && req.method === 'POST') {
       if (!body || Object.keys(body).some(key => key !== 'employee_id') || typeof body.employee_id !== 'string') fail(400, '员工账号不能为空。')
@@ -152,6 +159,7 @@ export class EmployeeAccess {
       if (!response.ok) fail(response.status === 404 ? 404 : 503, '暂时无法读取员工对话。')
       const data = await response.json()
       const projected = await service.presentation.messagesAs(auth.user, employee, data.messages)
+      await this.store.verifyActor(auth)
       if (!this.canView(auth, employee.id)) fail(403, '已停止查看该员工对话。')
       res.statusCode = 200; res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.end(JSON.stringify({ session_id: sessionId, messages: projected })); return true
     }
@@ -159,6 +167,7 @@ export class EmployeeAccess {
   }
 
   async sessions(actor, employee) {
+    this.employee(employee.id)
     if (!this.assignments.some(row => row.createdBy === actor.id && row.employeeId === employee.id)) return []
     const sessions = []
     for (let offset = 0; ; offset += 100) {

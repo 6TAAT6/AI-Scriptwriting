@@ -75,6 +75,49 @@ def _covers_episodes(content, requested):
     return set(range(requested[0], requested[1] + 1)) <= titles & scenes
 
 
+def _read_state():
+    return {'end':0,'complete':False,'facts':None,'carry':'','overflow':False,'last_line':None,'last_dialogue':None}
+
+
+def _comparison_pair(candidates,matches,owner):
+    """最新稿与直接前版均须在合法读取集合内，质量报告还必须匹配两份当前原文。"""
+    if not matches:return None
+    current=dict(matches[0]);allowed={row['id']:row for row in candidates}
+    with closing(plugin_db('jubao-drama')) as conn:
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='agent_document_quality'").fetchone():return None
+        row=conn.execute('SELECT d.content,q.content_sha256,q.report FROM agent_documents d '
+                         'JOIN agent_document_quality q ON q.document_id=d.id WHERE d.id=? AND d.agent_id=?',
+                         (current['id'],owner)).fetchone()
+        if not row:return None
+        content,digest,raw=row
+        if hashlib.sha256(content.encode()).hexdigest()!=digest:return None
+        report=json.loads(raw);identifier=report.get('previous_document_id')
+        if identifier not in allowed or identifier==current['id']:return None
+        old=conn.execute('SELECT content FROM agent_documents WHERE id=? AND agent_id=?',(identifier,owner)).fetchone()
+        if not old or hashlib.sha256(old[0].encode()).hexdigest()!=report.get('previous_content_sha256'):return None
+    current.update(characters=len(content),hash=digest)
+    previous={**allowed[identifier],'characters':len(old[0]),'hash':report['previous_content_sha256']}
+    boundaries=[boundary for check in report.get('checks',[]) for boundary in check.get('evidence',{}).get('ending_boundaries',[])]
+    return {'current':current,'previous':previous,'read':_read_state(),'ending_boundaries':boundaries}
+
+
+def _comparison_facts(plan):
+    comparison=plan.get('comparison')
+    if not comparison or not plan['read']['complete'] or not comparison['read']['complete']:return None
+    prefix=None
+    if comparison['ending_boundaries']:
+        from .requirement_checks import _episodes
+        with closing(plugin_db('jubao-drama')) as conn:
+            rows=conn.execute('SELECT id,content FROM agent_documents WHERE id IN (?,?) AND agent_id=?',
+                              (comparison['current']['id'],comparison['previous']['id'],plan['owner'])).fetchall()
+        versions={identifier:{row['episode_number']:row['text'] for row in _episodes(text)} for identifier,text in rows}
+        prefix=all(type(boundary.get('start_char')) is int and boundary['start_char']>=0 and
+                   all(boundary.get('episode') in versions.get(target['id'],{}) and
+                       hashlib.sha256(versions[target['id']][boundary['episode']][:boundary['start_char']].encode()).hexdigest()==boundary.get('locked_prefix_sha256')
+                       for target in (comparison['current'],comparison['previous'])) for boundary in comparison['ending_boundaries'])
+    return {'current':plan['read']['facts'],'previous':comparison['read']['facts'],'locked_prefix_unchanged':prefix}
+
+
 def begin_turn(user_message, session_id):
     from .agent_delivery import _auto_capture_allowed
     if not isinstance(user_message, str) or _auto_capture_allowed(user_message):
@@ -104,7 +147,7 @@ def begin_turn(user_message, session_id):
         owner = document_owner(session_id)
     except PermissionError:
         return None
-    target = None
+    target = None;comparison=None
     if full_read:
         candidates = _targets(session_id, owner)
         objects = _user_body(user_message)
@@ -122,6 +165,16 @@ def begin_turn(user_message, session_id):
                 conn.create_function('covers_episodes', 1, lambda content: _covers_episodes(content, requested_range))
                 matches = [row for row in matches if conn.execute('SELECT covers_episodes(content) FROM agent_documents WHERE id=?',
                                                                   (row['id'],)).fetchone()[0]]
+        compare_requested=bool(re.search(r'修改前后|修订前后|前后.{0,8}(?:两份|版本)|直接前版|previous_document_id',objects))
+        if compare_requested:
+            named_selection=bool(names or re.search(r'《[^》]+》|“[^”]+”|「[^」]+」',objects))
+            if not matches and not ids and not named_selection and not requested_range and re.search(r'刚才|最新|本次修改|本轮修改',objects):matches=candidates[:1]
+            comparison=_comparison_pair(candidates,matches,owner)
+            if comparison:
+                pair_ids={comparison['current']['id'],comparison['previous']['id']}
+                if (ids and not ids<=pair_ids) or (names and not {row['id'] for row in names}<=pair_ids):comparison=None
+            if comparison:matches=[comparison['current']]
+            else:matches=[]
         if len(matches) == 1:
             target = matches[0]
             with closing(plugin_db('jubao-drama')) as conn:
@@ -129,7 +182,7 @@ def begin_turn(user_message, session_id):
                 length, digest = conn.execute('SELECT LENGTH(content),source_hash(content) FROM agent_documents WHERE id=? AND agent_id=?',
                                               (target['id'], owner)).fetchone()
                 target.update(characters=length, hash=digest)
-    return {'profile': str(get_hermes_home().resolve()), 'session_id': session_id, 'owner': owner, 'target': target,
+    return {'profile': str(get_hermes_home().resolve()), 'session_id': session_id, 'owner': owner, 'target': target,'comparison':comparison,
             'requested': {'directory': directory, 'full_read': full_read, 'body_total': '正文' in text and '合计' in text,
                           'episode_counts': bool(re.search(r'每集|分别|分集.{0,6}(?:统计|字数)', text)),
                           'whole_total': bool(re.search(r'总数|全文|总字数|总字符|总汉字|总计', text)),
@@ -138,7 +191,7 @@ def begin_turn(user_message, session_id):
                           'paragraphs': bool(re.search(r'段落|\d+段', text)), 'file_checks': bool(re.search(r'文件|回执|核验', text)),
                           'cache': '缓存' in text, 'wps': 'WPS' in text.upper()},
             'directory': {'snapshot': None, 'total': None, 'end': 0, 'oldest': [], 'ids': [], 'complete': False},
-            'read': {'end': 0, 'complete': False, 'facts': None, 'carry': '', 'overflow': False, 'last_line': None, 'last_dialogue': None}}
+            'read':_read_state()}
 
 
 def _remember_lines(state, content, final):
@@ -169,6 +222,10 @@ def record(plan, tool_name, args, result, status='ok'):
         try: result = json.loads(result)
         except ValueError: return plan
     if not isinstance(args, dict) or not isinstance(result, dict) or result.get('ok') is not True:
+        return plan
+    comparison=plan.get('comparison')
+    if comparison and args.get('action')=='read' and args.get('document_id')==comparison['previous']['id']:
+        record({**plan,'comparison':None,'target':comparison['previous'],'read':comparison['read']},tool_name,args,result,status)
         return plan
     if args.get('action') == 'list' and plan['requested']['directory']:
         state = plan['directory']; rows = result.get('documents')
@@ -220,17 +277,23 @@ def snapshot(plan):
         return {'complete': False, 'missing': ['scope'], 'facts': {}, 'next_call': None,
                 'progress_key': None, 'terminal_reason': 'profile_mismatch'}
     directory, read = plan['directory'], plan['read']; missing = []; next_call = None
+    comparison=plan.get('comparison')
+    reading_complete=read['complete'] and (not comparison or comparison['read']['complete'])
     if plan['requested']['directory'] and not directory['complete']:
         missing.append('directory')
         next_call = {'action': 'list', 'offset': directory['end']}
         if directory['snapshot'] is not None: next_call['snapshot_rowid'] = directory['snapshot']
-    if plan['requested']['full_read'] and not read['complete']:
+    if plan['requested']['full_read'] and not reading_complete:
         missing.append('full_read')
         if next_call is None and plan['target']:
-            next_call = {'action': 'read', 'document_id': plan['target']['id'], 'start_char': read['end'],
-                         'max_chars': 12000, 'content_sha256': plan['target']['hash']}
+            target=plan['target'];cursor=read['end']
+            if comparison and read['complete']:
+                target=comparison['previous'];cursor=comparison['read']['end']
+            next_call = {'action': 'read', 'document_id': target['id'], 'start_char':cursor,
+                         'max_chars': 12000, 'content_sha256':target['hash']}
     return {'complete': not missing, 'missing': missing,
             'facts': {'directory': {'total': directory['total'], 'oldest': list(reversed(directory['oldest'])), 'saved_time_known': False}
-                      if directory['complete'] else None, 'read': read['facts'] if read['complete'] else None},
-            'next_call': next_call, 'progress_key': (directory['snapshot'], directory['end'], read['end']),
+                      if directory['complete'] else None, 'read': read['facts'] if read['complete'] else None,
+                      'comparison':_comparison_facts(plan)},
+            'next_call': next_call, 'progress_key': (directory['snapshot'], directory['end'], read['end'],comparison['read']['end'] if comparison else None),
             'terminal_reason': 'target_unresolved' if plan['requested']['full_read'] and not plan['target'] else None}

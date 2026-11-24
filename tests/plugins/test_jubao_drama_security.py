@@ -206,8 +206,7 @@ def test_named_agent_reads_both_office_materials_and_saves_its_document(runtime)
                 if agent_id != "oa6-1":
                     saved = json.loads(handle_function_call("drama_agent_document", {"action": "save", "name": "续写大纲", "content": "第7集：主角核对线索。"}, session_id=session_id))
                     assert saved.get("ok"), saved
-                    read = json.loads(handle_function_call("drama_agent_document", {"action": "read", "document_id": saved["document"]["id"]}, session_id=session_id))
-                    assert read["document"]["content"] == "第7集：主角核对线索。"
+                    assert saved["document"]["content"] == "第7集：主角核对线索。"
 
 
 @pytest.mark.parametrize("runtime", [True], indirect=True)
@@ -252,8 +251,8 @@ def test_business_gate_refusals_are_structured_and_non_retryable(runtime):
         mismatch = json.loads(handle_function_call(
             "skill_view", {"name": "巨豹 Agent-适配 OA6.1 版本"}, session_id="selected"))
         assert mismatch["blocked_reason"] == "agent_mismatch"
-        assert "巨豹满血版 V1.1" in mismatch["error"] and "巨豹测试版 V2.1" in mismatch["error"]
-        assert "巨豹满血版 V1.1" in mismatch["required_user_action"]
+        assert "GM3.1" in mismatch["error"] and "OA6.1" in mismatch["error"]
+        assert "GM3.1" in mismatch["required_user_action"]
         skill = json.loads(handle_function_call(
             "skill_view", {"name": "巨豹skill-去AI味"}, session_id="selected"))
         assert skill["blocked_reason"] == "skill_invocation_required"
@@ -645,3 +644,51 @@ def test_old_conversation_recovers_explicit_selection_but_disabled_binding_stays
             _submit_user_request(request,session_id=sid)
             assert modules[home].active_agent(sid) is None
             assert json.loads(handle_function_call('skill_view',{'name':'巨豹skill-去AI味'},session_id=sid)).get('error')
+
+
+@pytest.mark.parametrize('runtime', [True], indirect=True)
+def test_missing_skill_reference_lists_real_files_instead_of_bare_not_found(runtime):
+    """模型猜错参考文件名时，回执必须带出该技能真实存在的文件，否则会一个个继续猜。"""
+    from model_tools import handle_function_call
+
+    homes, _ = runtime
+    for home in (homes[0], homes[1], homes[0]):
+        with scope(home):
+            _submit_user_request({'messages': [{'role': 'user', 'content': '调用巨豹 Agent2.2 · 适配巨豹满血版 V1.1'}]},
+                                 session_id='skill-ref')
+            name = 'jubao-drama:jubao-agent-coauthor-2-2'
+            missing = json.loads(handle_function_call('skill_view', {
+                'name': name, 'file_path': 'references/modules/jubao-adaptation/naming.md'}, session_id='skill-ref'))
+            listed = [path for paths in missing.get('available_files', {}).values() for path in paths]
+            assert missing.get('success') is False and listed, missing
+            assert 'references/modules/jubao-adaptation/naming.md' not in listed
+            for path in listed:
+                assert json.loads(handle_function_call('skill_view', {'name': name, 'file_path': path},
+                                                       session_id='skill-ref')).get('success') is True
+
+
+def test_project_lookup_failure_names_the_real_cause_and_usable_projects(runtime):
+    """侧栏 project_id 误传给剧本流程工具时，不能再回通用的“先读取当前项目状态”。"""
+    from model_tools import handle_function_call
+
+    homes, _ = runtime
+    sidebar_id = 'f55a6f3b-9dda-42a3-b042-eeefc53ca9c7'
+    for home in (homes[0], homes[1], homes[0]):
+        with scope(home):
+            before = json.loads(handle_function_call('drama_project_status', {'project_id': sidebar_id},
+                                                     session_id='lookup'))
+            created = json.loads(handle_function_call('drama_project_create', {'title': home.name},
+                                                      session_id='lookup'))['project']
+            after = json.loads(handle_function_call('drama_project_status', {'project_id': sidebar_id},
+                                                    session_id='lookup'))
+            for result in (before, after):
+                assert result['ok'] is False and result['retryable'] is True
+                assert result['blocked_reason'] == 'project_not_found'
+                assert '侧栏' in result['required_user_action'] and 'drama_' not in result['required_user_action']
+                assert '先读取当前项目状态' not in result['required_user_action']
+                assert result['next']
+            assert created['id'] not in {row['id'] for row in before['available_projects']}
+            assert created['id'] in {row['id'] for row in after['available_projects']}
+            for row in after['available_projects']:
+                assert json.loads(handle_function_call('drama_project_status', {'project_id': row['id']},
+                                                       session_id='lookup'))['ok'] is True

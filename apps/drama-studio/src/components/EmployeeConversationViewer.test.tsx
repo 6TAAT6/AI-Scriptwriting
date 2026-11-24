@@ -29,7 +29,7 @@ test('员工只读创作步骤使用业务工具名称并脱敏原始回执', ()
   render(<EmployeeConversationViewer />)
 
   fireEvent.click(screen.getByText(/创作步骤/))
-  expect(screen.getByText('阅读资料：操作未完成，请稍后重试。')).toBeTruthy()
+  expect(screen.getByText('未能阅读资料 · 操作未完成，请稍后重试。')).toBeTruthy()
   expect(screen.queryByText(/read_file|provider|grok-4\.7/)).toBeNull()
 })
 
@@ -48,6 +48,6 @@ test('员工成功步骤的内部回执仅显示通用完成摘要', () => {
   render(<EmployeeConversationViewer />)
 
   fireEvent.click(screen.getByText(/创作步骤/))
-  expect(screen.getByText('阅读资料：操作已返回')).toBeTruthy()
+  expect(screen.getByText('已阅读资料')).toBeTruthy()
   expect(screen.queryByText(/provider|grok-4\.7/)).toBeNull()
 })

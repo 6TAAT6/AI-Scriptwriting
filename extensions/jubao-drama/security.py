@@ -16,6 +16,7 @@ ALLOWED_TOOLS = frozenset({
     "drama_project_create", "drama_project_status", "drama_material_import", "drama_submit",
     "drama_confirm", "drama_review", "drama_export", "drama_rules_read", "todo_list", "clarify", "delegate_task", "image_generate",
     "skills_list", "skill_view", "drama_agent_document", "memory", "session_search",
+    "drama_story_bible", "drama_requirements",
 })
 _DENIED = "当前创作账号只允许处理本账号的剧本资料与创作流程。"
 _DRAMA_TOOLS = frozenset({
@@ -27,8 +28,13 @@ _DELEGATION_TASK_FIELDS = frozenset({"goal", "context", "output_schema", "group"
 _LOGGER = logging.getLogger(__name__)
 
 
-def _blocked(error: str, reason: str, required_user_action: str, *, retryable: bool = False) -> str:
-    """Return a machine-readable policy refusal so the model stops replaying the same call."""
+def _blocked(error: str, reason: str, required_user_action: str, *, retryable: bool = True) -> str:
+    """Return a machine-readable policy refusal so the model stops replaying the same call.
+
+    默认可重试：模型看到拒绝后改用允许的工具，或直接用文字回答用户（如普通对话里不保存文档、
+    未选择 Agent 时提示用户选择）。不可重试会让宿主整轮停止，用户只看到“本次操作已暂停”；
+    同一调用反复被拒仍由循环保护停止。只有越权访问其他账号这类边界保持不可重试。
+    """
     return json.dumps({
         "error": error,
         "blocked_reason": reason,
@@ -40,9 +46,6 @@ def _blocked(error: str, reason: str, required_user_action: str, *, retryable: b
 def _skill_selection_refusal(candidate, selected):
     from .agent_profiles import CAPABILITIES
 
-    if candidate is None:
-        return _blocked("未找到当前请求的创作能力。", "capability_not_found",
-                        "请从输入框的 Agent 或独立技能菜单中选择需要的能力，再发送请求。")
     capability = CAPABILITIES[candidate]
     name = capability["display_name"]
     if capability["kind"] == "skill":
@@ -54,6 +57,31 @@ def _skill_selection_refusal(candidate, selected):
                         f"请继续使用已选择的“{current}”处理当前任务；如需使用其他 Agent，请从 Agent 菜单明确选择后发送请求。")
     return _blocked("当前对话尚未成功选择剧本 Agent，暂时无法读取它的创作规则。", "agent_invocation_required",
                     f"请从输入框的 Agent 菜单选择“{name}”后发送请求；也可以在消息开头写“使用{name}。”并附上任务要求。")
+
+
+def _unknown_skill_name(args, selected, session_id):
+    """未知名称是模型可纠正的参数错误；纠正提示仅列出用户已经授权的能力。"""
+    from .agent_profiles import CAPABILITIES, requested_agent
+    from .capability_selection import active_skills
+
+    name = args.get('name') if isinstance(args, dict) else None
+    if isinstance(name, str) and ':' in name and name.strip().split(':', 1)[0] != 'jubao-drama':
+        return _blocked('当前创作账号不能读取其他插件的能力。', 'capability_namespace_not_allowed',
+                        '请继续使用当前已选择的创作能力。')
+    allowed = set(active_skills(session_id))
+    primary = selected or requested_agent(session_id)
+    if primary:
+        allowed.add(primary)
+    canonical = ['jubao-drama:' + row['skill'] for key, row in CAPABILITIES.items() if key in allowed]
+    return json.dumps({
+        'error': '本次工具请求的技能名称不存在或格式不正确，请按当前已选能力修正。',
+        'blocked_reason': 'invalid_tool_arguments', 'parameter': 'name', 'retryable': True,
+        'required_user_action': '当前选择已保留，可继续使用已选能力处理请求。',
+        'allowed_skill_names': canonical,
+        'next': '仅使用 allowed_skill_names 中与当前任务对应的名称；已成功加载的无需重复加载。'
+                '不要猜测相邻编号或新增技能名。读取参考资料时保留原技能 name，并将相对路径放入 file_path。'
+                '若列表为空，不加载任何创作能力，按普通对话回答。',
+    }, ensure_ascii=False)
 
 
 def _delegation_allowed(args) -> bool:
@@ -126,10 +154,22 @@ def _account_history_args(args):
 def tool_execution(tool_name, args, next_call, *, session_id="", **_kwargs):
     try:
         limited = restricted()
+        from agent.delegation_context import is_delegated_child_context
+        child = limited and is_delegated_child_context()
+        if child:
+            from .child_readonly import allowed, read_parent_basis
+            if not allowed(tool_name, args):
+                return _blocked("子代理只能读取创作依据并返回分析，不保存、核验、导出或修改状态。",
+                                "child_readonly", "把分析与修改建议返回主创作会话。")
+            if tool_name in {"drama_agent_document", "drama_story_bible", "drama_requirements", "session_search"}:
+                try:
+                    return read_parent_basis(tool_name, args, session_id)
+                except (ValueError, PermissionError) as exc:
+                    return _blocked(str(exc), "child_readonly", "仅使用父创作会话提供的资料与稿件。")
         from .agent_profiles import (
             CAPABILITIES, activation_required, active_agent, activate_agent, requested_agent,
         )
-        from .capability_selection import active_skills, capability_for_skill
+        from .capability_selection import active_skills, capability_for_skill, requested_creative
         strict = activation_required()
         candidate = capability_for_skill(args.get("name") if tool_name == "skill_view" and isinstance(args, dict) else "")
         if candidate and tool_name == "skill_view":
@@ -138,6 +178,8 @@ def tool_execution(tool_name, args, next_call, *, session_id="", **_kwargs):
         if strict:
             selected = active_agent(session_id)
             if tool_name == "skill_view":
+                if candidate is None:
+                    return _unknown_skill_name(args, selected, session_id)
                 independent = candidate and CAPABILITIES[candidate]["kind"] == "skill"
                 allowed = candidate in active_skills(session_id) if independent else candidate and (
                     candidate == selected or not selected and requested_agent(session_id) == candidate)
@@ -147,14 +189,18 @@ def tool_execution(tool_name, args, next_call, *, session_id="", **_kwargs):
                     activate_agent(session_id, candidate)
             if tool_name in _DRAMA_TOOLS - {"drama_material_import", "drama_agent_document"}:
                 if not selected:
-                    return _blocked("请先调用三个剧本 Agent 之一，再使用剧本创作工具。",
+                    return _blocked("请先调用一个剧本 Agent，再使用剧本创作工具。",
                                     "agent_invocation_required", "等待用户调用一个剧本 Agent 后再调用该工具。")
                 if selected != "oa6-1":
                     return _blocked("当前 Agent 使用独立 skill 与 drama_agent_document，不使用 OA6.1 的改编工作流。",
                                     "agent_workflow_mismatch", "改用当前 Agent 支持的独立 skill/工具，或由用户切换到 OA6.1。")
-            if tool_name == "drama_agent_document" and not selected and not active_skills(session_id):
-                return _blocked("请先调用一个剧本 Agent 或独立技能。", "capability_required",
-                                "等待用户调用一个剧本 Agent 或独立技能后再保存稿件。")
+            # 员工不选能力直接要稿件时，稿件照常保存与核验；创作规则（Agent/技能）仍须明确选择才能加载。
+            if (tool_name == "drama_agent_document" and args.get("action") != "check"
+                    and not selected and not active_skills(session_id) and not requested_creative(session_id)):
+                from .plain_documents import allowed
+                if not allowed(args, session_id):
+                    return _blocked("当前请求尚未授权保存或导出文档。", "capability_required",
+                                    "用户明确要求保存或导出文件后，可直接交付当前会话正文；创作规则仍需明确选择 Agent 或技能。")
         if limited:
             if tool_name == "session_search":
                 args = _account_history_args(args)
@@ -184,6 +230,9 @@ def tool_execution(tool_name, args, next_call, *, session_id="", **_kwargs):
                     or tool_name not in ALLOWED_TOOLS
                     or not isinstance(session_id, str) or not session_id.strip()):
         return _blocked(_DENIED, "account_tool_not_allowed", "改用当前账号允许的剧本工具。")
+    if limited and tool_name == "delegate_task" and args.get("action", "spawn").strip().lower() == "spawn":
+        from .creative_delegation import execute
+        return execute(args, next_call, session_id)
     return next_call(args)
 
 
@@ -228,6 +277,9 @@ def _parent_descriptor(candidate: Path, *, writing=False):
             os.close(fd)
             fd = child
         yield fd, candidate.name
+    except FileNotFoundError:
+        # 已确认路径属于当前账号；缺失资料与越权需要不同的恢复动作。
+        raise FileNotFoundError("资料文件不存在，请核对实际上传或保存的文件。") from None
     except (OSError, NotImplementedError):
         raise PermissionError(_DENIED) from None
     finally:
@@ -287,7 +339,12 @@ def _product_instructions(text: str) -> str:
 def llm_request(request, **_kwargs):
     if not restricted() or not isinstance(request, dict):
         return None
-    changed = deepcopy(request)
+    from agent.delegation_context import is_delegated_child_context
+    if is_delegated_child_context():
+        from .child_readonly import project_tools
+        changed = project_tools(request)
+    else:
+        changed = deepcopy(request)
     # 只变换请求中的系统身份段；用户稿件、历史回复和工具回执保持原字节内容。
     for key in ("messages", "input"):
         values = changed.get(key)

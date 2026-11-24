@@ -2,7 +2,9 @@ import { unzipSync } from 'fflate'
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 const S = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+const STRICT_S = 'http://purl.oclc.org/ooxml/spreadsheetml/main'
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+const STRICT_R = 'http://purl.oclc.org/ooxml/officeDocument/relationships'
 const P = 'http://schemas.openxmlformats.org/package/2006/relationships'
 const MAX_BYTES = 20 * 1024 * 1024
 const elements = (node: Document | Element, ns: string, tag: string) => Array.from(node.getElementsByTagNameNS(ns, tag))
@@ -38,26 +40,31 @@ export function readOfficeText(data: Uint8Array, extension: 'docx' | 'xlsx'): st
     }).join('')).join('\n\n')
   } else {
     const workbook = xml('xl/workbook.xml')
+    const namespace = workbook.documentElement.namespaceURI
+    if (namespace !== S && namespace !== STRICT_S) throw new Error('工作簿 XML 格式无法识别。')
+    const spreadsheetElements = (node: Document | Element, tag: string) => elements(node, namespace, tag)
     const relations = new Map(elements(xml('xl/_rels/workbook.xml.rels'), P, 'Relationship').map(node => [node.getAttribute('Id'), node]))
-    const shared = files['xl/sharedStrings.xml'] ? elements(xml('xl/sharedStrings.xml'), S, 'si').map(node => elements(node, S, 't').map(part => part.textContent || '').join('')) : []
-    text = elements(workbook, S, 'sheet').filter(sheet => !sheet.getAttribute('state') || sheet.getAttribute('state') === 'visible').map(sheet => {
-      const relation = relations.get(sheet.getAttributeNS(R, 'id'))
+    const shared = files['xl/sharedStrings.xml'] ? spreadsheetElements(xml('xl/sharedStrings.xml'), 'si').map(node => spreadsheetElements(node, 't').map(part => part.textContent || '').join('')) : []
+    text = spreadsheetElements(workbook, 'sheet').filter(sheet => !sheet.getAttribute('state') || sheet.getAttribute('state') === 'visible').map(sheet => {
+      const relation = relations.get(sheet.getAttributeNS(namespace === S ? R : STRICT_R, 'id'))
       const target = relation?.getAttribute('Target') || ''
       if (!target || relation?.getAttribute('TargetMode') === 'External' || target.includes('\\') || target.split('/').includes('..')) throw new Error('工作表关系无效。')
       const member = target.startsWith('/') ? target.slice(1) : `xl/${target}`
       if (!member.startsWith('xl/')) throw new Error('工作表关系超出文档范围。')
       const labels = new Map<string, string>()
-      const rows = elements(xml(member), S, 'row').map((row, index) => {
-        const cells = elements(row, S, 'c').map((cell, position) => {
+      const rows = spreadsheetElements(xml(member), 'row').map((row, index) => {
+        const cells = spreadsheetElements(row, 'c').map((cell, position) => {
           const column = cell.getAttribute('r')?.match(/^[A-Z]+/)?.[0] || String(position + 1)
           const kind = cell.getAttribute('t')
-          const cached = elements(cell, S, 'v')[0]
+          const cached = spreadsheetElements(cell, 'v')[0]
+          const formula = spreadsheetElements(cell, 'f')[0]
           let value = cached?.textContent || ''
-          if (kind === 'inlineStr') value = elements(cell, S, 't').map(node => node.textContent || '').join('')
+          if (formula && (!cached || !value && kind !== 'str')) value = `[公式未计算${formula.textContent ? `：=${formula.textContent}` : ''}]`
+          else if (kind === 'inlineStr') value = spreadsheetElements(cell, 't').map(node => node.textContent || '').join('')
           else if (kind === 's') {
             if (!/^\d+$/.test(value) || shared[Number(value)] === undefined) throw new Error('工作表文字索引无效。')
             value = shared[Number(value)]
-          } else if (elements(cell, S, 'f').length && !cached) throw new Error('公式尚未计算，请先在表格软件中保存结果。')
+          }
           if (index === 0 && value && value.length <= 40 && !value.includes('\n')) labels.set(column, value)
           return value ? `${index > 0 ? labels.get(column) || `${column}列` : `${column}列`}：${value}` : ''
         }).filter(Boolean)

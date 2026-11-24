@@ -6,6 +6,20 @@ import { conversationSelection, type CapabilitySelection } from './capabilities'
 export const DIALOGUE_LANGUAGES = ['仅中文', '中英双语'] as const
 export const DEFAULT_DIALOGUE_LANGUAGE = DIALOGUE_LANGUAGES[0]
 
+export interface EpisodeStatistics { episode: string; hanCharacters: number; nonWhitespaceCharacters: number }
+
+const textCount = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 0
+
+function episodeStatistics(value: unknown): EpisodeStatistics[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const rows = value.flatMap(item => {
+    const row = item && typeof item === 'object' ? item as Record<string, unknown> : undefined
+    return typeof row?.episode === 'string' && textCount(row.han_characters) && textCount(row.non_whitespace_characters)
+      ? [{ episode: row.episode, hanCharacters: row.han_characters, nonWhitespaceCharacters: row.non_whitespace_characters }] : []
+  })
+  return rows.length ? rows : undefined
+}
+
 export interface Artifact {
   id: string
   name: string
@@ -19,10 +33,19 @@ export interface Artifact {
   documentKind?: string
   sourceMessageId?: string
   sourceResponseSha256?: string
-  textStatistics?: { hanCharacters: number; nonWhitespaceCharacters: number }
+  /** 质量回执记录的直接前版，不按同名推断版本。 */
+  previousDocumentId?: string
+  previousContentSha256?: string
+  contentSha256?: string
+  /** episodes 来自后端同一份回执，按集正文（不含集标题）统计，与模型核验字数同源。 */
+  textStatistics?: { hanCharacters: number; nonWhitespaceCharacters: number; episodes?: EpisodeStatistics[] }
   contentVerified?: boolean
   layoutVerified?: boolean
   wpsVerified?: boolean
+  /** 用户要求核验结论：checked 已通过，revision_required 未通过（仍可下载草稿）。 */
+  reviewStatus?: 'checked' | 'revision_required'
+  /** 同一回复中同名稿件的版本数（仅展示用）。 */
+  versions?: number
 }
 export interface ProjectSummary { id: string; title: string; stage: string; artifacts: Artifact[]; agentId?: string }
 
@@ -48,10 +71,16 @@ export function projectFromResult(value: unknown): ProjectSummary | null {
   const artifacts: Artifact[] = []
   const addContent = (id: string, name: string, value: unknown, kind: Artifact['kind'] = 'result') => {
     const item = record(value)
+    const quality = record(item?.quality_check)
+    const previousDocumentId = item?.previous_document_id ?? quality?.previous_document_id
     if (typeof item?.content === 'string' && item.content) artifacts.push({ id, name, content: item.content, kind,
       ...(typeof item.kind === 'string' ? { documentKind: item.kind } : {}),
       ...(typeof item.source_message_id === 'string' || typeof item.source_message_id === 'number' ? { sourceMessageId: String(item.source_message_id) } : {}),
-      ...(typeof item.source_response_sha256 === 'string' ? { sourceResponseSha256: item.source_response_sha256 } : {})
+      ...(typeof item.source_response_sha256 === 'string' ? { sourceResponseSha256: item.source_response_sha256 } : {}),
+      ...(typeof previousDocumentId === 'string' && previousDocumentId ? { previousDocumentId } : {}),
+      ...(typeof item.previous_content_sha256 === 'string' ? { previousContentSha256: item.previous_content_sha256 } : {}),
+      ...(typeof item.content_sha256 === 'string' ? { contentSha256: item.content_sha256 } : {}),
+      ...(item.status === 'checked' || item.status === 'revision_required' ? { reviewStatus: item.status } : {})
     })
   }
   addContent('source', '原始剧本', project.source, 'source')
@@ -88,7 +117,8 @@ export function projectFromResult(value: unknown): ProjectSummary | null {
       if (statistics?.method === 'unicode_han_and_non_whitespace_v1'
         && Number.isSafeInteger(statistics.han_characters) && Number(statistics.han_characters) >= 0
         && Number.isSafeInteger(statistics.non_whitespace_characters) && Number(statistics.non_whitespace_characters) >= 0) {
-        source.textStatistics = { hanCharacters: Number(statistics.han_characters), nonWhitespaceCharacters: Number(statistics.non_whitespace_characters) }
+        source.textStatistics = { hanCharacters: Number(statistics.han_characters), nonWhitespaceCharacters: Number(statistics.non_whitespace_characters),
+          episodes: episodeStatistics(statistics.episodes) }
       }
       source.contentVerified = item?.content_verified === true
       source.layoutVerified = item?.layout_verified === true

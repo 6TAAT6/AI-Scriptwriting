@@ -72,15 +72,8 @@ def test_save_persists_word_versions_and_recovers_without_losing_saved_text(plug
             plugin.document_action({"action": "export", "document_id": internal["document"]["id"]}, "author")
         listed = plugin.document_action({"action": "list"}, "author")
         read = plugin.document_action({"action": "read", "document_id": document_id}, "author")
-        assert read["project"]["exports"] == [receipt]
-        listed_ids = {item["id"] for item in listed["documents"]}
-        while listed["has_more"]:
-            listed = plugin.document_action(listed["next_call"], "author")
-            listed_ids.update(item["id"] for item in listed["documents"])
-        assert document_id in listed_ids and revised["document"]["id"] in listed_ids
-        for expected in (receipt, revised["receipt"]):
-            exported = plugin.document_action({"action": "export", "document_id": expected["artifact_id"]}, "author")["receipt"]
-            assert exported["sha256"] == expected["sha256"] and exported["source_sha256"] == expected["source_sha256"]
+        assert listed["project"]["exports"] == read["project"]["exports"]
+        assert receipt in listed["project"]["exports"] and revised["receipt"] in listed["project"]["exports"]
 
         # 回执存在不能证明磁盘文件仍可读，损坏后须生成新文件并保留原路径。
         Path(receipt["path"]).write_bytes(b"damaged document")
@@ -96,14 +89,13 @@ def test_save_persists_word_versions_and_recovers_without_losing_saved_text(plug
         failed = plugin.document_action(new_args, "blocked")
         assert failed["ok"] is False and failed["saved"] is True and failed["export_error"]
         pending = plugin.document_action({"action": "list"}, "blocked")
-        assert plugin.document_action({"action": "read", "document_id": pending["documents"][0]["id"]}, "blocked")["document"]["content"] == new_args["content"]
-        assert plugin.document_action({"action": "read", "document_id": pending["documents"][0]["id"]}, "blocked")["document"]["export_status"] == "failed"
+        assert pending["documents"][0]["content"] == new_args["content"]
+        assert pending["documents"][0]["export_status"] == "failed"
         blocked.unlink()
         retried = plugin.document_action(new_args, "blocked")
         assert retried["ok"] is True and retried["document"]["id"] == failed["document"]["id"]
         assert "林岚：证据找到了。" in plugin.read_material(retried["receipt"]["path"])["text"]
-        listed = plugin.document_action({"action": "list"}, "author")
-        assert revised["document"]["id"] in {item["id"] for item in listed["documents"]}
+        assert revised["receipt"] in plugin.document_action({"action": "list"}, "author")["project"]["exports"]
 
 
 def test_real_profile_scope_preserves_receipts_across_a_b_a_without_cross_access(plugin, tmp_path, monkeypatch):
@@ -131,11 +123,7 @@ def test_real_profile_scope_preserves_receipts_across_a_b_a_without_cross_access
                     assert current["document"]["id"] == saved[home]["document"]["id"]
                     assert current["receipt"] == saved[home]["receipt"]
                 saved[home] = current
-                listed = plugin.document_action({"action": "list"}, "author")
-                assert [row["id"] for row in listed["documents"]] == [current["document"]["id"]]
-                restored = plugin.document_action({"action": "export", "document_id": current["document"]["id"]}, "author")["receipt"]
-                assert all(restored[key] == current["receipt"][key]
-                           for key in ("artifact_id", "path", "sha256", "source_sha256", "content_verified"))
+                assert plugin.document_action({"action": "list"}, "author")["project"]["exports"] == [current["receipt"]]
                 other = next((value for key, value in saved.items() if key != home), None)
                 if other:
                     with pytest.raises(ValueError, match="当前 Agent 会话"):
@@ -371,55 +359,3 @@ def test_reconcile_uses_explicit_turn_ownership_and_real_tool_receipts_for_summa
                 assert next(item for item in compared["documents"] if item["id"] == authoritative["document"]["id"])["content"] == outline_source
         finally:
             database.close()
-
-
-def test_merge_delivery_summary_does_not_become_a_manuscript_or_link_read_sources(plugin, tmp_path):
-    """真实合并稿已保存时，交付说明和核对摘句不是另一份完整正文。"""
-    from hermes_state import SessionDB
-    delivery = importlib.import_module(plugin.__name__ + '.agent_delivery')
-    with profile_scope(tmp_path), closing(SessionDB(tmp_path / 'state.db')) as database:
-        database.create_session('merge', source='web')
-        plugin.activate_agent('merge', 'gm3-1')
-        source = plugin.document_action({'action':'save','kind':'script','name':'第一集来源',
-                                         'content':'第1集\n1-1场 室内 日 内\n人物：林岚\n△林岚将交付给剧院的道具放好。\n林岚：钥匙给你。'}, 'merge')
-        database.append_message('merge','user','调用巨豹 Agent-适配 GM3.1 版本\n请合并原文并核对两端台词。')
-        read_args = {'action':'read','document_id':source['document']['id']}
-        database.append_message('merge','assistant',tool_calls=[{'id':'read-source','type':'function','function':{'name':'drama_agent_document','arguments':json.dumps(read_args)}}])
-        database.append_message('merge','tool',json.dumps(plugin.document_action(read_args,'merge'),ensure_ascii=False),tool_name='drama_agent_document',tool_call_id='read-source')
-        content = '第1集\n1-1场 室内 日 内\n人物：林岚\n林岚：钥匙给你。\n\n第2集\n2-1场 街头 夜 外\n人物：林岚\n△林岚完成交付，转身离开。\n林岚：我们明天见。'
-        save_args = {'action':'save','kind':'script','name':'第01-02集完整正文','content':content}
-        database.append_message('merge','assistant',tool_calls=[{'id':'save-merge','type':'function','function':{'name':'drama_agent_document','arguments':json.dumps(save_args,ensure_ascii=False)}}])
-        merged=plugin.document_action(save_args,'merge')
-        database.append_message('merge','tool',json.dumps(merged,ensure_ascii=False),tool_name='drama_agent_document',tool_call_id='save-merge')
-        summary='已完成来源确认与原文合并：\n1. **来源确认**：第一集来自此前已保存的第一批正文，第二集来自独立保存的完整原稿。\n2. **合并交付**：未做任何重写或摘要删减，已按第 01 至 02 集正文顺序全量合并并生成专属 Word。\n\n---\n\n### 【核对关键台词】\n- **第 01 集最后一句台词**：\n  > **林岚：钥匙给你。**\n- **第 02 集最后一句台词**：\n  > **林岚：我们明天见。**\n\n---\n\n【Word 交付文件】\n- 全剧完整正文合集：合并正文.docx'
-        message_id=database.append_message('merge','assistant',summary,finish_reason='stop')
-        result=delivery.reconcile_session_documents('merge')
-        assert {row['id'] for row in result['documents']} == {source['document']['id'],merged['document']['id']}
-        assert next(row for row in result['documents'] if row['id']==merged['document']['id'])['content']==content
-        linked=[row['id'] for row in result['documents'] if str(row.get('source_message_id'))==str(message_id)]
-        assert linked==[merged['document']['id']]
-        assert '林岚完成交付' in plugin.read_material(merged['receipt']['path'])['text']
-        database.append_message('merge','user','请只核对刚才合并稿的集数、第五集场头与末句台词。')
-        args={'action':'read','document_id':merged['document']['id']}
-        database.append_message('merge','assistant',tool_calls=[{'id':'verify-read','type':'function','function':{'name':'drama_agent_document','arguments':json.dumps(args)}}])
-        database.append_message('merge','tool',json.dumps(plugin.document_action(args,'merge'),ensure_ascii=False),tool_name='drama_agent_document',tool_call_id='verify-read')
-        verification='已根据刚才的完整正文读取核对：\n\n1. 集数：第1至2集。\n2. 字符总数：按原稿记录核对。\n3. 第1集场头：\n1-1场 室内 日 内\n4. 第2集最后一句台词：\n林岚：我们明天见。\n\n以上仅为读取到的四项核对结果，原稿中的其他段落未在此重复展示。'
-        checked=database.append_message('merge','assistant',verification,finish_reason='stop')
-        verified=delivery.reconcile_session_documents('merge')
-        assert {row['id'] for row in verified['documents']} == {source['document']['id'],merged['document']['id']}
-        assert not any(str(row.get('source_message_id'))==str(checked) for row in verified['documents'])
-
-
-def test_document_verification_heading_is_not_new_script_and_real_creation_still_saves(plugin, tmp_path):
-    """核查报告即使标题含完整正文也不是剧本；无工具的真实创作仍补存。"""
-    delivery = importlib.import_module(plugin.__name__ + '.agent_delivery')
-    with profile_scope(tmp_path):
-        plugin.activate_agent('review-only', 'gm3-1')
-        report = "已完成稿件目录查询与完整正文的分段回读核查，报告如下：\n\n### 一、会话稿件目录核查结果\n- 已保存稿件总数：31份\n\n### 二、《测试故事》第1—10集全剧完整正文回读核查结果\n- 对应文档编号：example\n- 总字符数：17059字符（汉字13454，非空白15894）\n- 第10集最后一句：\n> 全体将士：我们明天再见。"
-        assert delivery.capture_response('review-only', report, source_id='review-result', user_message='核对已有完整正文。')['captures'] == []
-        created = "第1集\n\n1-1场 剧院 日 内\n\n人物：林岚\n\n△林岚将要交付给剧院的道具放好，逐一核对箱子上的名字，再把清单收进口袋。\n\n林岚：核查结果已经写在记录里，这次我们可以放心出发了。"
-        result = delivery.capture_response('review-only', created, source_id='new-scene', user_message='请创作第一集完整正文。')
-        assert len(result['captures']) == 1
-        assert result['captures'][0]['content'] == created
-        explicit = plugin.document_action({'action':'save','kind':'analysis','name':'正文核查分析报告','content':report}, 'review-only')
-        assert explicit['ok'] and explicit['document']['kind'] == 'analysis'

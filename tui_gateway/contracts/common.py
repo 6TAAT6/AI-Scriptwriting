@@ -66,6 +66,8 @@ class SessionLiveInfo(OpenModel):
 
     model: str = ""
     provider: str = ""
+    model_selection_required: bool = False
+    model_selection_error: str = ""
     reasoning_effort: str = ""
     # The level the route's entry clamp actually sends for ``reasoning_effort`` ("" when unset/none;
     # equal when verbatim). Lets clients label a clamped Hermes step ("ultra sends max on this route").

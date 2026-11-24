@@ -319,11 +319,3 @@ native/fts5_cjk/*.so
 /pm/.lock.json.lock
 
 apps/desktop/.dist-build*
-
-# 巨豹工作区的本地任务、部署状态与业务运行资料
-/tasks/
-/production-final-status.json
-/state/
-/runtime/
-/deploy/
-*.sqlite3

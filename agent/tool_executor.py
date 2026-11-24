@@ -772,7 +772,12 @@ def _run_agent_tool_execution_middleware(
         apply_tool_request_middleware,
         run_tool_execution_middleware,
     )
+    from tools.arg_coercion import coerce_tool_args
 
+    # Same order as model_tools.handle_function_call: schema-guided type repair first, so Relay,
+    # plugin middleware, pre_tool_call hooks and guardrails see the values the tool will receive
+    # ("true" -> True for a boolean parameter), not the raw model strings.
+    function_args = coerce_tool_args(function_name, function_args)
     trace = middleware_trace if middleware_trace is not None else []
     state = _ManagedToolResult(result=None, args=function_args, middleware_trace=trace, blocked=False, dispatched=False)
     dispatch_lock = threading.Lock()

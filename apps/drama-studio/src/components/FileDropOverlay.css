@@ -15,8 +15,8 @@
 .file-drop-card { display: flex; flex-direction: column; align-items: center; gap: 13px; text-align: center; line-height: 1.7; }
 .file-drop-icon { display: grid; place-items: center; width: 64px; height: 64px; margin-bottom: 6px; border-radius: 18px; background: var(--purple-light); }
 .file-drop-card strong { font-size: 18px; font-weight: 600; }
-.file-drop-card > span:not(.file-drop-icon) { color: var(--subtle); font-size: 12px; }
-.file-drop-card small { font-size: 11px; letter-spacing: .5px; }
+.file-drop-card > span:not(.file-drop-icon) { color: var(--subtle); font-size: 13px; }
+.file-drop-card small { font-size: 12px; letter-spacing: .5px; }
 .file-drop-overlay.is-blocked { border-color: var(--border); color: var(--subtle); }
 .file-drop-overlay.is-blocked .file-drop-icon { background: var(--hover); }
 @keyframes file-drop-enter { from { opacity: 0; } to { opacity: 1; } }

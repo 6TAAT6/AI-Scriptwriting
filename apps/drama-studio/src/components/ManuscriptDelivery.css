@@ -1,8 +1,17 @@
 .manuscript-delivery { margin: 8px 0 20px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
-.manuscript-delivery-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; color: var(--text); font-size: 13px; }
+.manuscript-delivery-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; color: var(--text); font-size: 14px; }
 .manuscript-delivery-heading > span { color: var(--subtle); overflow-wrap: anywhere; }
-.manuscript-delivery-meta, .manuscript-delivery-verification { color: var(--muted); font-size: 11px; line-height: 1.7; margin: 7px 0; }
-.manuscript-delivery-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; color: var(--purple); font-size: 12px; }
+.manuscript-delivery-meta, .manuscript-delivery-verification { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 7px 0; }
+.manuscript-delivery-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; color: var(--purple); font-size: 13px; }
 .manuscript-delivery-actions > button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
 .manuscript-delivery-actions > button:focus-visible { outline: 2px solid var(--purple); outline-offset: 3px; }
 .manuscript-delivery-body { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); min-width: 0; overflow-wrap: anywhere; }
+
+.manuscript-episodes { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 9px 0 2px; padding: 0; list-style: none; color: var(--subtle); font-size: 12px; }
+.manuscript-episodes li { padding: 3px 8px; border-radius: 6px; background: var(--hover); white-space: nowrap; }
+.manuscript-episodes li > span { margin-right: 6px; color: var(--text); font-weight: 550; }
+.manuscript-delivery.is-superseded { padding: 10px 16px; background: var(--panel); }
+.manuscript-delivery.is-superseded .manuscript-delivery-heading { font-size: 13px; margin-bottom: 8px; }
+
+.manuscript-versions { display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 5px; font-size: 12px; line-height: 1.4; white-space: nowrap; }
+.manuscript-versions { color: var(--muted); background: var(--hover); }

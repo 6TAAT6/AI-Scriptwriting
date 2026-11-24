@@ -1,5 +1,6 @@
 import { atom } from 'nanostores'
 import { publicError } from '../../shared/public-errors.mjs'
+import { type OrganizationId } from '../../shared/organizations.mjs'
 
 export interface StudioUser {
   id: string
@@ -11,6 +12,14 @@ export interface StudioUser {
   profile: string
   activated_at?: string | null
   activation_required?: boolean
+  organization_policy?: boolean
+  organization?: OrganizationId
+  auth_source?: 'local' | 'company'
+  managed_organizations?: OrganizationId[]
+  conversation_organizations?: OrganizationId[]
+  local_login_reason?: 'test' | 'pending_company'
+  company_removed_at?: string
+  company_sync_disabled?: boolean
 }
 export const $currentUser = atom<StudioUser | null>(null)
 export const $authenticationNotice = atom('')
@@ -19,6 +28,7 @@ let csrfToken = ''
 let sessionRevision = 0
 let sessionExpiresAt: number | null = null
 let logoutPending = false
+const COMPANY_SWITCH_INTENT = 'studio-company-switch'
 
 interface SessionResponse { user: StudioUser | null; csrfToken?: string; expiresAt?: number }
 export interface UserInput {
@@ -26,8 +36,9 @@ export interface UserInput {
   display_name: string
   password: string
   role: 'admin' | 'employee'
+  organization?: OrganizationId
 }
-export interface UserPatch { display_name?: string; role?: 'admin' | 'employee'; enabled?: boolean }
+export interface UserPatch { display_name?: string; role?: 'admin' | 'employee'; enabled?: boolean; organization?: OrganizationId; managed_organizations?: OrganizationId[] }
 
 export async function studioRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const revision = sessionRevision
@@ -52,6 +63,8 @@ export async function studioRequest<T>(path: string, method = 'GET', body?: unkn
 }
 
 function setSession(data: SessionResponse) {
+  const previous = $currentUser.get()
+  if (previous && (previous.id !== data.user?.id || previous.profile !== data.user?.profile)) window.dispatchEvent(new Event('studio:auth-clearing'))
   if ($currentUser.get()?.id !== data.user?.id || csrfToken !== (data.csrfToken || '')) sessionRevision += 1
   csrfToken = data.csrfToken || ''
   sessionExpiresAt = data.user && typeof data.expiresAt === 'number' && Number.isFinite(data.expiresAt) ? data.expiresAt : null
@@ -67,6 +80,39 @@ export function refreshCsrfToken(next: string) {
 }
 
 export async function loadCurrentUser() { return setSession(await studioRequest<SessionResponse>('/auth/me')) }
+export async function loginOptions(): Promise<{ company: boolean; organizations: boolean }> {
+  const response = await fetch('/studio/auth/options', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+  if (!response.ok) throw new Error('暂时无法读取登录选项。')
+  const data = await response.json()
+  return { company: data.company === true, organizations: data.organizations === true }
+}
+function setCompanySwitchIntent() {
+  try { sessionStorage.setItem(COMPANY_SWITCH_INTENT, '1') } catch {}
+  window.dispatchEvent(new Event('studio:company-switch'))
+}
+export function consumeCompanySwitchIntent() {
+  try {
+    const requested = sessionStorage.getItem(COMPANY_SWITCH_INTENT) === '1'
+    sessionStorage.removeItem(COMPANY_SWITCH_INTENT)
+    return requested
+  } catch { return false }
+}
+export async function startCompanyLogin(switchAccount = false) {
+  clearAuthentication()
+  const result = await studioRequest<{ url: string }>('/auth/company/start', 'POST', switchAccount ? { switch_account: true } : {})
+  window.location.assign(result.url)
+}
+export async function completeCompanyLogin(ticket: string, state: string) {
+  clearAuthentication()
+  return setSession(await studioRequest<SessionResponse>('/auth/company/complete', 'POST', { ticket, state }))
+}
+export async function launchCompanyLogin(code: string) {
+  clearAuthentication()
+  return setSession(await studioRequest<SessionResponse>('/auth/company/launch', 'POST', { code }))
+}
+export async function activateCompanyAccount(activation_code: string) {
+  return setSession(await studioRequest<SessionResponse>('/auth/company/activate', 'POST', { activation_code }))
+}
 export async function login(username: string, password: string, activationCode = '') {
   sessionRevision += 1
   return setSession(await studioRequest<SessionResponse>('/auth/login', 'POST', { username, password, ...(activationCode.trim() ? { activation_code: activationCode.trim() } : {}) }))
@@ -97,13 +143,29 @@ export function expireAuthentication() {
     ? '你长时间未登录，请重新登录。' : '登录已失效，请重新登录。')
   clearAuthentication(notice)
 }
-export async function logout() {
+export async function logout({ switchCompany = false }: { switchCompany?: boolean } = {}) {
   sessionRevision += 1
   logoutPending = true
   try {
     await studioRequest('/auth/logout', 'POST', {})
+    if (switchCompany) setCompanySwitchIntent()
     clearAuthentication()
   } finally { logoutPending = false }
+}
+export interface CompanyEmployee {
+  employee_id: string
+  name: string
+  account: string
+  department_name: string | null
+  position_name: string | null
+  department_organizations: OrganizationId[]
+  username_conflict: boolean
+}
+export async function listCompanyEmployees() {
+  return studioRequest<{ available: boolean; changed?: boolean; employees: CompanyEmployee[] }>('/admin/company-employees')
+}
+export async function assignCompanyEmployee(employee_id: string, organization: 'hangzhou' | 'chongqing') {
+  return (await studioRequest<{ user: StudioUser }>('/admin/company-employees', 'POST', { employee_id, organization })).user
 }
 export async function listUsers() { return (await studioRequest<{ users: StudioUser[] }>('/admin/users')).users }
 export async function createUser(input: UserInput) { return (await studioRequest<{ user: StudioUser }>('/admin/users', 'POST', input)).user }
@@ -141,13 +203,14 @@ export interface ModelEndpointInput {
   image_model?: string
   image_models?: string[]
 }
-export interface ModelEndpoint extends Omit<ModelEndpointInput, 'api_key'> { id: string; has_api_key: boolean; is_current?: boolean }
+export interface ModelEndpoint extends Omit<ModelEndpointInput, 'api_key'> { id: string; has_api_key: boolean; is_current?: boolean; enabled?: boolean }
 export async function listModelEndpoints() { return (await studioRequest<{ endpoints: ModelEndpoint[] }>('/admin/models')).endpoints }
 export async function saveModelEndpoint(input: ModelEndpointInput) { return studioRequest<{ ok: boolean; endpoints: ModelEndpoint[]; message: string }>('/admin/models', 'POST', input) }
 export async function validateModelEndpoint(input: ModelEndpointInput) { return studioRequest<{ ok: boolean; models: string[]; message: string }>('/admin/models/validate', 'POST', input) }
+export async function setModelEndpointEnabled(id: string, enabled: boolean) { return studioRequest<{ ok: boolean; endpoints: ModelEndpoint[]; message: string }>('/admin/models/enabled', 'POST', { id, enabled }) }
 
 export interface ModelDisplayName { id: string; kind: 'text' | 'image'; provider: string; model: string; display_name: string; visible: boolean }
 export interface ModelTarget { provider: string; provider_name: string; models: string[]; image_models: string[] }
-export interface ModelBranding { models: ModelDisplayName[]; targets: ModelTarget[] }
+export interface ModelBranding { models: ModelDisplayName[]; targets: ModelTarget[]; disabled_targets?: Pick<ModelTarget, 'provider' | 'provider_name'>[] }
 export async function listModelDisplayNames() { return studioRequest<ModelBranding>('/admin/model-names') }
 export async function saveModelDisplayNames(models: ModelDisplayName[]) { return studioRequest<ModelBranding>('/admin/model-names', 'POST', { models }) }

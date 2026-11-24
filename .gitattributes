@@ -35,6 +35,3 @@ docker/entrypoint.sh text eol=lf
 *.html  text eol=lf
 *.svg   text eol=lf
 *.ps1   text eol=crlf
-
-# 保留导入技能原文的原始字节，使来源 SHA-256 在克隆后仍可验证。
-extensions/jubao-drama/skills/jubao-skill-humanize/references/** -text

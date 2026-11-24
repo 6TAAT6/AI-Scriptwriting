@@ -1709,7 +1709,7 @@ class GatewayInboundMixin:
         )
 
     async def _expand_inbound_context_references(
-        self, source: SessionSource, session_key: str, message_text: str
+        self, source: SessionSource, session_key: str, message_text: str, metadata: Optional[dict] = None
     ) -> Optional[str]:
         """Expand ``@`` context references; returns None when the injection was refused (user notified)."""
         try:
@@ -1734,6 +1734,8 @@ class GatewayInboundMixin:
                 return None
             if _ctx_result.expanded:
                 message_text = _ctx_result.message
+                if metadata is not None:
+                    metadata.update(_ctx_result.requirement_metadata)
         except Exception as exc:
             logger.warning("@ context reference expansion failed: %s", exc)
             logger.debug("@ context reference expansion failure detail", exc_info=True)
@@ -1750,6 +1752,7 @@ class GatewayInboundMixin:
         rehome_inbound_media(event)  # before any consumer (vision, STT, document notes) reads media_urls
         _pending_stt_prepared = hasattr(event, "_gateway_pending_stt_text")
         message_text = (event._gateway_pending_stt_text if _pending_stt_prepared else event.text) or ""
+        event._context_reference_metadata = {}
         # Prefer the caller's resolved session key so this write key matches the consume key at the
         # run_conversation site; derive it here only for tests and legacy standalone callers.
         session_key = session_key or self._session_key_for_source(source)
@@ -1765,7 +1768,8 @@ class GatewayInboundMixin:
         message_text = self._prepend_inbound_media_file_notes(message_text, audio_file_paths, video_paths)
         message_text = self._prepend_inbound_document_notes(event, message_text)
         if "@" in message_text:
-            message_text = await self._expand_inbound_context_references(source, session_key, message_text)
+            message_text = await self._expand_inbound_context_references(
+                source, session_key, message_text, event._context_reference_metadata)
             if message_text is None:
                 return None
         # After expansion: the quoted reply is someone else's text and stays literal — an

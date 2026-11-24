@@ -678,6 +678,8 @@ def _(rid, params: dict) -> dict:
     session, err = _sess_nowait(params, rid)
     if err:
         return err
+    if selection_error := session.get("model_selection_error"):
+        return _err(rid, 5032, selection_error)
     from tools.bot_relay import DeliveryAuthor
 
     # Only the relay handler can build a DeliveryAuthor. A dict here is a client claiming a sender.

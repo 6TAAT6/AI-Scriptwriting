@@ -5,6 +5,28 @@ import { Workspace, type WorkspaceApi } from './workspace'
 
 afterEach(() => localStorage.clear())
 
+it('后台重读同一会话时先提交已排队正文，避免32ms窗口内的增量被恢复快照覆盖', async () => {
+  let finishResume!: (value: SessionResumeResult) => void
+  const answer = '第一场：正在继续写作。'
+  const local = new Workspace({ profile: 'restore-batch', materials: async () => ({ project: null, sources: [] }),
+    rpc: (async method => {
+      if (method === 'session.resume') return new Promise(resolve => { finishResume = resolve })
+      if (method === 'subagent.list') return { subagents: [] }
+      if (method === 'session.events.since') return { events: [] }
+      throw new Error('后台重读不应提交生成')
+    }) as WorkspaceApi['rpc'] })
+  local.session.set({ runtimeId: 'live', storedId: 'saved', info: { running: true } })
+  local.conversation.set({ runtimeId: 'live', running: true, error: '', entries: [
+    { id: 'reply', role: 'assistant', text: '第一场：', calls: [], pending: true }
+  ] })
+  const opening = local.open('saved', { background: true })
+  local.receive({ type: 'message.delta', session_id: 'live', payload: { text: answer.slice('第一场：'.length) } })
+  finishResume({ session_id: 'live', stored_session_id: 'saved', running: true, info: { running: true },
+    messages: [], message_count: 0, inflight: { assistant: '第一场：', streaming: true } })
+  await opening
+  expect(local.conversation.get().entries.at(-1)?.text).toBe(answer)
+})
+
 it('同会话恢复期间的新正文和完成事件不被旧快照覆盖，后续同步恢复完整历史且不重复正文', async () => {
   let finishResume!: (value: SessionResumeResult) => void
   let resumes = 0

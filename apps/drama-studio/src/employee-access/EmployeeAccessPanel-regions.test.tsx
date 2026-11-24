@@ -5,7 +5,7 @@ import { EmployeeAccessPanel } from './EmployeeAccessPanel'
 import { resetEmployeeConversations, type EmployeeConversationGroup } from './api'
 
 const chongqing: StudioUser = { id: 'd64dc6c0-9fc6-4c8f-911c-61957f4a4c63', username: 'cq-writer', display_name: '重庆员工', role: 'employee', enabled: true, created_at: '2026-10-01T00:00:00Z', profile: 'studio-cq' }
-const hangzhou: StudioUser = { ...chongqing, id: 'hangzhou-writer', username: 'hz-writer', display_name: '杭州员工', profile: 'studio-hz' }
+const hangzhou: StudioUser = { ...chongqing, id: 'hangzhou-writer', username: 'hz-writer', display_name: '横店员工', profile: 'studio-hz' }
 const admin: StudioUser = { ...chongqing, id: '18311314-470b-471f-a907-199af477d6cb', username: 'cq-admin', display_name: '重庆管理员', role: 'admin' }
 const disabled: StudioUser = { ...hangzhou, id: 'disabled-writer', username: 'disabled', display_name: '停用员工', enabled: false }
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
@@ -33,7 +33,7 @@ test('地区员工选项保持权限过滤，添加后加入对应分组并隐�
   await screen.findByRole('option', { name: '重庆员工（cq-writer）' })
   const select = screen.getByRole('combobox', { name: '选择员工' })
   expect(within(select).getByRole('group', { name: '重庆' }).textContent).toBe('重庆员工（cq-writer）')
-  expect(within(select).getByRole('group', { name: '横店' }).textContent).toBe('杭州员工（hz-writer）')
+  expect(within(select).getByRole('group', { name: '横店' }).textContent).toBe('横店员工（hz-writer）')
   expect(screen.queryByRole('option', { name: /重庆管理员|停用员工/ })).toBeNull()
 
   fireEvent.change(select, { target: { value: chongqing.id } })
@@ -68,7 +68,7 @@ test('地区授权分组默认展开，可分别折叠并正确移除同步异�
   fireEvent.click(cqToggle)
   expect(cqToggle.getAttribute('aria-expanded')).toBe('false')
   expect(screen.queryByText('同步中，稍后自动重试')).toBeNull()
-  expect(screen.getByText('杭州员工')).toBeTruthy()
+  expect(screen.getByText('横店员工')).toBeTruthy()
   fireEvent.click(cqToggle)
   const cqSection = screen.getByRole('rowgroup', { name: '重庆分组' })
   fireEvent.click(within(cqSection).getByRole('button', { name: '移除查看' }))

@@ -29883,6 +29883,16 @@
             "title": "Provider",
             "type": "string"
           },
+          "model_selection_required": {
+            "default": false,
+            "title": "Model Selection Required",
+            "type": "boolean"
+          },
+          "model_selection_error": {
+            "default": "",
+            "title": "Model Selection Error",
+            "type": "string"
+          },
           "reasoning_effort": {
             "default": "",
             "title": "Reasoning Effort",
@@ -30748,6 +30758,16 @@
           "provider": {
             "default": "",
             "title": "Provider",
+            "type": "string"
+          },
+          "model_selection_required": {
+            "default": false,
+            "title": "Model Selection Required",
+            "type": "boolean"
+          },
+          "model_selection_error": {
+            "default": "",
+            "title": "Model Selection Error",
             "type": "string"
           },
           "reasoning_effort": {
@@ -35901,6 +35921,54 @@
             ],
             "default": null,
             "title": "Labels"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Blocked Reason"
+          },
+          "required_user_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Required User Action"
+          },
+          "retryable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Retryable"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tool"
           }
         },
         "required": [

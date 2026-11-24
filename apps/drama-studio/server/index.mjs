@@ -12,12 +12,17 @@ import { createEmployeeAccess } from './employee-access.mjs'
 import { rm } from 'node:fs/promises'
 import { createOriginPolicy } from './origin-policy.mjs'
 import { sessionDocuments } from './session-documents.mjs'
+import { creativeMemory, editCreativeMemory } from './creative-memory.mjs'
 import { ModelDisplayNames, createModelDisplayNamesService } from './model-display-names.mjs'
+import { createMaintenance } from './maintenance.mjs'
+import { CompanySso } from './company-sso.mjs'
+import { handleCompanyEmployees, startCompanySync } from './company-employees.mjs'
 
-const COOKIE = 'drama_studio_session'
-function cookieToken(req) {
+// 登录 Cookie 名按部署配置区分：同一台机器上的几套环境端口不同，但浏览器按主机共用 Cookie，名字相同会互相顶掉登录。
+const DEFAULT_COOKIE = 'drama_studio_refactor_session'
+function readCookie(req, name) {
   const cookies = (req.headers.cookie || '').split(';').map(value => value.trim())
-  const value = cookies.find(value => value.startsWith(COOKIE + '='))?.slice(COOKIE.length + 1) || ''
+  const value = cookies.find(value => value.startsWith(name + '='))?.slice(name.length + 1) || ''
   return /^[A-Za-z0-9_-]{43}$/.test(value) ? value : ''
 }
 function json(res, status, data) {
@@ -34,12 +39,16 @@ async function bodyJson(req) {
   return data
 }
 function keys(body, fields) { if (Object.keys(body).some(key => !fields.includes(key))) fail(400, '请求包含不支持的字段。') }
-function setCookie(res, secure, token, expires = SESSION_TTL / 1000) {
-  res.setHeader('Set-Cookie', `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${expires}${secure ? '; Secure' : ''}`)
+function writeCookie(name, res, secure, token, expires = SESSION_TTL / 1000) {
+  res.setHeader('Set-Cookie', `${name}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${expires}${secure ? '; Secure' : ''}`)
 }
 
 /** 账号边缘服务：浏览器始终使用账号 Cookie，后端万能凭证只留在此进程。 */
-export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome = path.join(repoRoot, '.hermes'), provisionProfile, backendToken, workerPool, publicOrigin }) {
+export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome = path.join(repoRoot, '.hermes'), provisionProfile, backendToken, workerPool, publicOrigin, cookieName, identity = {}, companySso }) {
+  const COOKIE = cookieName || DEFAULT_COOKIE
+  if (!/^[A-Za-z0-9_]{1,80}$/.test(COOKIE)) throw new Error('登录 Cookie 名称无效。')
+  const cookieToken = req => readCookie(req, COOKIE)
+  const setCookie = (...args) => writeCookie(COOKIE, ...args)
   const { sameOrigin, cookieSecure } = createOriginPolicy(publicOrigin)
   const provision = provisionProfile ?? workerPool?.provision ?? profileProvisioner(repoRoot, hermesHome)
   const removeProfile = async profile => {
@@ -49,22 +58,27 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
       rm(path.join(hermesHome, 'studio-workers', profile), { recursive: true, force: true })
     ])
   }
-  const store = await AccountStore.open(dataDir, provision, removeProfile)
+  const company = companySso ?? (identity.company ? new CompanySso(identity.company) : null)
+  if (company && identity.enabled !== true) throw new Error('公司登录需要启用组织身份配置。')
+  if (company && (!publicOrigin || new URL(company.callback).origin !== new URL(publicOrigin).origin)) throw new Error('公司回调必须与工作区公开入口同源。')
+  const store = await AccountStore.open(dataDir, provision, removeProfile, { organizations: identity.enabled === true, company })
+  const maintenance = await createMaintenance({ dataDir, store })
+  const companySync = store.organizations && company ? startCompanySync({ store, company }) : null
   const service = new StudioBackend({ backend, repoRoot, hermesHome, backendToken, workerPool })
   const sidebar = await createSidebarService({ dataDir, store, service })
   const employeeAccess = await createEmployeeAccess(dataDir, store, service)
-  const modelSettings = createModelSettingsService({ service, store, workerPool })
+  const modelSettings = createModelSettingsService({ service, store, workerPool, endpointImpact: id => modelNames.disableImpact(id), onChanged: () => socket.modelsChanged() })
   const modelNames = await ModelDisplayNames.open(dataDir, () => modelSettings.managedEndpoints())
   service.modelNames = modelNames
-  const displayNames = createModelDisplayNamesService({ modelNames, store })
+  const displayNames = createModelDisplayNamesService({ modelNames, store, onChanged: () => socket.modelsChanged() })
   const attempts = new Map()
   const installed = new Set()
-  const authenticateRequest = (req, required = true) => {
-    const token = cookieToken(req), auth = store.authenticate(token)
+  const authenticateRequest = async (req, required = true, { activation = false } = {}) => {
+    const token = cookieToken(req), auth = store.authenticate(token, { activation })
     if (!auth && required) fail(401, '请先登录巨豹智能体。')
-    return auth ? { ...auth, token } : null
+    return auth ? store.verifyActor({ ...auth, token }, { activation }) : null
   }
-  const socket = createSocketBridge({ backend: service, store, authenticateRequest, sameOrigin })
+  const socket = createSocketBridge({ backend: service, store, authenticateRequest, sameOrigin, maintenance })
   // 可选的外部运维采集器；加载失败不会阻断业务服务。
   if (process.env.JUBAO_STUDIO_OBSERVER) {
     try {
@@ -85,6 +99,7 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
     })
   }
   store.revoked.add(revokeWorker)
+  store.onCompanyInvalidated = revokeWorker
   const csrf = (req, auth) => {
     const supplied = req.headers['x-studio-csrf']
     if (typeof supplied !== 'string' || supplied.length !== auth.csrfToken.length || !timingSafeEqual(Buffer.from(supplied), Buffer.from(auth.csrfToken))) fail(403, '页面验证已过期，请刷新后重试。')
@@ -96,16 +111,60 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
     if (++row.count > 20) fail(429, '登录尝试过于频繁，请一分钟后重试。')
   }
   async function studio(req, res, url) {
+    if (url.pathname === '/studio/maintenance' && req.method === 'GET') { json(res, 200, maintenance.snapshot()); return }
+    const sessionResponse = result => {
+      setCookie(res, cookieSecure(req), result.token, Math.max(0, Math.floor((result.expiresAt - Date.now()) / 1000)))
+      json(res, 200, { user: result.user, csrfToken: result.csrfToken, expiresAt: result.expiresAt })
+    }
+    if (url.pathname === '/studio/auth/options' && req.method === 'GET') {
+      json(res, 200, { company: Boolean(company), organizations: store.organizations }); return
+    }
+    if (url.pathname === '/studio/auth/logout' && req.method === 'POST') {
+      const token = cookieToken(req), auth = store.authenticate(token, { activation: true })
+      if (!auth) fail(401, '登录已失效，请重新登录。')
+      csrf(req, auth); keys(await bodyJson(req), [])
+      await store.logout(token); setCookie(res, cookieSecure(req), '', 0); json(res, 200, { ok: true }); return
+    }
+    if (['/studio/auth/company/start', '/studio/auth/company/complete', '/studio/auth/company/launch'].includes(url.pathname) && req.method === 'POST') {
+      maintenance.assertLogin()
+      checkLoginRate(req)
+      if (!company) fail(503, '公司登录尚未配置，请联系管理员。')
+      const oldToken = cookieToken(req)
+      if (oldToken) await store.logout(oldToken)
+      setCookie(res, cookieSecure(req), '', 0)
+      const body = await bodyJson(req)
+      if (url.pathname.endsWith('/start')) {
+        keys(body, ['switch_account'])
+        if ('switch_account' in body && typeof body.switch_account !== 'boolean') fail(400, '切换账号参数不正确。')
+        const result = company.begin({ switchAccount: body.switch_account === true })
+        res.setHeader('Set-Cookie', [`${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${cookieSecure(req) ? '; Secure' : ''}`, `${COOKIE}_company=${result.transaction}; Path=/studio/auth/company/; HttpOnly; SameSite=Lax; Max-Age=120${cookieSecure(req) ? '; Secure' : ''}`])
+        json(res, 200, { url: result.url }); return
+      }
+      let result
+      if (url.pathname.endsWith('/launch')) { keys(body, ['code']); result = await company.launch(body.code) }
+      else { keys(body, ['ticket', 'state']); result = await company.complete(readCookie(req, COOKIE + '_company'), body.ticket, body.state) }
+      maintenance.assertLogin()
+      // 公司后台刚新建的员工：先同步一次目录，按部门定归属建号，再完成首次登录。
+      if (companySync && !store.users.some(row => row.auth_source === 'company' && row.employee_id === result.employee.id)) await companySync.run()
+      const session = await store.companyLogin(result)
+      try { maintenance.assertLogin() }
+      catch (error) { await store.logout(session.token); throw error }
+      sessionResponse(session); return
+    }
     if (url.pathname === '/studio/auth/login' && req.method === 'POST') {
+      maintenance.assertLogin()
       checkLoginRate(req)
       const body = await bodyJson(req); keys(body, ['username', 'password', 'activation_code'])
-      const result = await store.login(body.username, body.password, body.activation_code)
+      const result = await store.login(body.username, body.password, body.activation_code, { peer_ip: req.socket.remoteAddress, forwarded_ip: req.headers['x-real-ip'], response: res })
+      try { maintenance.assertLogin() }
+      catch (error) { await store.logout(result.token); throw error }
       const oldToken = cookieToken(req)
       if (oldToken) await store.logout(oldToken)
       setCookie(res, cookieSecure(req), result.token)
       json(res, 200, { user: result.user, csrfToken: result.csrfToken, expiresAt: result.expiresAt }); return
     }
-    let auth = authenticateRequest(req, url.pathname !== '/studio/auth/me' || req.method !== 'GET')
+    const activation = ['/studio/auth/me', '/studio/auth/company/activate'].includes(url.pathname)
+    let auth = await authenticateRequest(req, url.pathname !== '/studio/auth/me' || req.method !== 'GET', { activation })
     if (url.pathname === '/studio/auth/me' && req.method === 'GET') {
       json(res, 200, auth ? { user: auth.user, csrfToken: auth.csrfToken, expiresAt: auth.expires } : { user: null }); return
     }
@@ -113,8 +172,16 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
     if (!['GET', 'HEAD'].includes(req.method)) {
       csrf(req, auth)
       body = await bodyJson(req)
-      auth = authenticateRequest(req)
+      auth = await authenticateRequest(req, true, { activation })
       csrf(req, auth)
+    }
+    if (url.pathname === '/studio/auth/company/activate' && req.method === 'POST') {
+      maintenance.assertLogin()
+      keys(body, ['activation_code'])
+      const result = await store.activateCompany(auth, body.activation_code)
+      try { maintenance.assertLogin() }
+      catch (error) { await store.logout(result.token); throw error }
+      sessionResponse(result); return
     }
     const user = auth.user
     if (await sidebar.handle(req, res, url, auth, body)) return
@@ -125,10 +192,13 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
       const result = await sessionDocuments(service, user, body, () => store.requireActor(auth))
       json(res, 200, result); return
     }
-    if (url.pathname === '/studio/bootstrap' && req.method === 'GET') { json(res, 200, { profile: user.profile, user, csrfToken: auth.csrfToken }); return }
-    if (url.pathname === '/studio/auth/logout' && req.method === 'POST') {
-      await store.logout(auth.token); setCookie(res, cookieSecure(req), '', 0); json(res, 200, { ok: true }); return
+    if (url.pathname === '/studio/creative-memory' && req.method === 'POST') {
+      json(res, 200, await creativeMemory(service, user, body, () => store.requireActor(auth))); return
     }
+    if (url.pathname === '/studio/creative-memory/edit' && req.method === 'POST') {
+      json(res, 200, await editCreativeMemory(service, user, body, () => store.requireActor(auth))); return
+    }
+    if (url.pathname === '/studio/bootstrap' && req.method === 'GET') { json(res, 200, { profile: user.profile, user, csrfToken: auth.csrfToken }); return }
     if (url.pathname === '/studio/account' && req.method === 'PATCH') {
       keys(body, ['display_name'])
       json(res, 200, { user: await store.renameSelf(auth, body) }); return
@@ -152,11 +222,13 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
       keys(body, [])
       json(res, 200, await store.deleteActivationCode(auth, activationCode[1])); return
     }
+    const companyEmployees = await handleCompanyEmployees({ req, url, user, auth, body, store, company })
+    if (companyEmployees) { json(res, companyEmployees.status, companyEmployees.data); return }
     if (url.pathname === '/studio/admin/users') {
       if (!['admin', 'super_admin'].includes(user.role)) fail(403, '此操作需要管理员权限。')
-      if (req.method === 'GET') { json(res, 200, { users: store.listUsers() }); return }
+      if (req.method === 'GET') { json(res, 200, { users: store.listUsers(auth) }); return }
       if (req.method === 'POST') {
-        keys(body, ['username', 'display_name', 'password', 'role'])
+        keys(body, ['username', 'display_name', 'password', 'role', ...(store.organizations ? ['organization'] : [])])
         json(res, 201, { user: await store.create(auth, body) }); return
       }
     }
@@ -168,7 +240,7 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
       json(res, 200, result); return
     }
     if (match && req.method === 'PATCH' && !match[2]) {
-      keys(body, ['display_name', 'role', 'enabled'])
+      keys(body, ['display_name', 'role', 'enabled', ...(store.organizations ? ['organization', 'managed_organizations'] : [])])
       json(res, 200, { user: await store.update(auth, match[1], body) }); return
     }
     if (match && req.method === 'POST' && match[2]) {
@@ -178,10 +250,10 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
     fail(404, '此功能不存在。')
   }
   async function api(req, res, url) {
-    const auth = authenticateRequest(req), { user } = auth
+    const auth = await authenticateRequest(req), { user } = auth
     let fileSourceId
-    const authorizeRead = () => {
-      store.requireActor(auth)
+    const authorizeRead = async () => {
+      await store.verifyActor(auth)
       if (fileSourceId && !employeeAccess.canView(auth, fileSourceId)) fail(403, '已停止查看该员工的资料。')
     }
     service.requireEmployeeChannel(user)
@@ -201,7 +273,7 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
         candidate = entry.path; fileUser = entry.sourceUser
       } else candidate = await service.file(user, requested)
       const crossProfileHandle = handleRequest && fileUser.profile !== user.profile
-      if (crossProfileHandle) { fileSourceId = fileUser.id; authorizeRead(); fileUser = employeeAccess.employee(fileSourceId) }
+      if (crossProfileHandle) { fileSourceId = fileUser.id; await authorizeRead(); fileUser = employeeAccess.employee(fileSourceId) }
       const sessionId = url.searchParams.get('session_id')
       const freshSession = sessionId && service.ownsFreshSession(user, sessionId)
       if (sessionId && !freshSession && !crossProfileHandle) await service.session(user, sessionId)
@@ -212,15 +284,15 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
     if (sessionPath) {
       const data = await response.json()
       const messages = isEmployee(user) ? await service.presentation.messages(user, data.messages) : await service.presentation.nativeMessages(user, data.messages)
-      authenticateRequest(req)
+      await authenticateRequest(req)
       json(res, 200, isEmployee(user) ? { session_id: decodeURIComponent(sessionPath[1]), messages } : { ...data, messages }); return
     }
     if (isEmployee(user) && url.pathname === '/api/fs/read-text') {
       const data = await response.json()
-      authorizeRead()
+      await authorizeRead()
       json(res, 200, { path: url.searchParams.get('path'), text: data.binary ? '' : typeof data.text === 'string' ? data.text : '', binary: Boolean(data.binary), truncated: Boolean(data.truncated) }); return
     }
-    authorizeRead()
+    await authorizeRead()
     res.statusCode = response.status
     for (const header of ['content-type', 'content-disposition', 'content-length']) if (response.headers.has(header)) res.setHeader(header, response.headers.get(header))
     if (response.body) await forwardBody(response.body, res)
@@ -245,11 +317,13 @@ export async function createStudioEdge({ backend, dataDir, repoRoot, hermesHome 
   }
   return {
     store,
+    maintenance,
+    companySync,
     seedRoot: password => store.seedRoot(password),
     install({ middlewares, httpServer }) {
       middlewares.use(middleware)
       if (httpServer && !installed.has(httpServer)) { httpServer.on('upgrade', socket.upgrade); installed.add(httpServer) }
     },
-    async close() { for (const server of installed) server.off('upgrade', socket.upgrade); await socket.close(); await store.queue; await modelNames.queue; store.revoked.delete(revokeWorker); await Promise.allSettled([...workerRevocations]); await workerPool?.close() }
+    async close() { for (const server of installed) server.off('upgrade', socket.upgrade); await companySync?.close(); await maintenance.close(); await socket.close(); await store.queue; await modelNames.queue; company?.close(); store.revoked.delete(revokeWorker); await Promise.allSettled([...workerRevocations]); await workerPool?.close() }
   }
 }

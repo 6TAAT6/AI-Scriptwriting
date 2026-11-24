@@ -24,7 +24,7 @@ function missing(res) {
 }
 
 /** 正式入口只读取已构建的公开资产，关闭时先收回会话与员工进程，再释放监听。 */
-export async function startStudioServer({ repoRoot, appRoot, backend, backendToken, hermesHome = path.join(repoRoot, '.hermes'), dataDir, host = '127.0.0.1', port = 10619, workerPool, publicOrigin }) {
+export async function startStudioServer({ repoRoot, appRoot, backend, backendToken, hermesHome = path.join(repoRoot, '.hermes'), dataDir, host = '127.0.0.1', port = 10619, workerPool, publicOrigin, cookieName, identity, companySso }) {
   const configured = parsePublicOrigin(publicOrigin)
   const bindHost = LOOPBACK_HOSTS.get(host) ?? (configured ? host : null)
   if (!bindHost) throw new Error('未设置公开访问地址时，工作区仅支持本机回环地址。')
@@ -33,7 +33,7 @@ export async function startStudioServer({ repoRoot, appRoot, backend, backendTok
   const index = await realpath(path.join(dist, 'index.html'))
   if (!contains(dist, index) || !(await stat(index)).isFile()) throw new Error('请先构建工作区前端。')
   const pool = workerPool ?? new WorkerPool({ repoRoot, hermesHome })
-  const edge = await createStudioEdge({ repoRoot, backend, backendToken, hermesHome, dataDir, workerPool: pool, publicOrigin })
+  const edge = await createStudioEdge({ repoRoot, backend, backendToken, hermesHome, dataDir, workerPool: pool, publicOrigin, cookieName, identity, companySso })
   const sockets = new Set()
   let closing, shuttingDown = false, middleware
 
@@ -41,7 +41,7 @@ export async function startStudioServer({ repoRoot, appRoot, backend, backendTok
     let handle
     try {
       const pathname = new URL(req.url, 'http://localhost').pathname
-      const filename = pathname === '/' ? 'index.html' : pathname.slice(1)
+      const filename = pathname === '/' || pathname === '/auth/company/callback' ? 'index.html' : pathname.slice(1)
       const candidate = await realpath(path.join(dist, filename))
       if (!contains(dist, candidate)) { missing(res); return }
       const type = MIME[path.extname(filename)]

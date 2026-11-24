@@ -77,11 +77,13 @@ def main():
     from model_settings import router as model_settings_router
     from image_selection import router as image_selection_router
     from session_documents import router as session_documents_router
+    from creative_memory import router as creative_memory_router
 
     configure_app(app, model_settings_router, token)
     original_routes = len(app.router.routes)
     app.include_router(image_selection_router)
     app.include_router(session_documents_router)
+    app.include_router(creative_memory_router)
     app.router.routes[:] = app.router.routes[original_routes:] + app.router.routes[:original_routes]
     sys.argv = [sys.argv[0], "serve", *sys.argv[1:]]
     run()
@@ -123,9 +125,11 @@ def worker(token):
     app.state.initial_profile = "default"
     from image_selection import router as image_selection_router
     from session_documents import router as session_documents_router
+    from creative_memory import router as creative_memory_router
     configure_app(app, image_selection_router, token)
     original_routes = len(app.router.routes)
     app.include_router(session_documents_router)
+    app.include_router(creative_memory_router)
     app.router.routes[:] = app.router.routes[original_routes:] + app.router.routes[:original_routes]
     install_exit_flush_signal_handlers()
     config = uvicorn.Config(app, host="127.0.0.1", port=options.port, fd=options.worker_fd,

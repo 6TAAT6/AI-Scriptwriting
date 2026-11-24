@@ -32,6 +32,7 @@ from agent.error_classifier import (
 from agent.sdk_transform_bypass import bypass_chat_sdk_request_transform
 from agent.errors import EmptyStreamError
 from agent.chat_completion_stream_monitor import StreamingWaitMonitor
+from agent.chat_completion_tool_calls import ToolCallAccumulator
 from agent.transports.chat_completions import is_router_timeout_shim, router_timeout_shim_may_follow
 from agent.fast_mode import effective_request_overrides
 from agent.turn_context import substitute_api_content
@@ -2792,102 +2793,6 @@ class _BedrockStream:
         return _with_stream_emitters(self.agent, self._poll)
 
 
-class _ToolCallAccumulator:
-    """Assemble streamed tool-call deltas into complete ``tool_calls`` entries
-    (``acc``: slot index -> entry dict). Ollama-compatible endpoints reuse index 0
-    for every call in a parallel batch, distinguishing them only by id, so a new
-    id at an already-seen raw index is redirected to a fresh slot. Some Gemini
-    gateways omit the id too; a non-prefix full JSON argument on a reused index
-    is treated as a new call."""
-
-    def __init__(self):
-        self.acc: dict = {}
-        self._notified: set = set()
-        self._last_id_at_idx: dict = {}      # raw_index -> last seen non-empty id
-        self._active_slot_by_idx: dict = {}  # raw_index -> current slot in acc
-        # Argument deltas are collected per slot and joined once in ``materialize`` —
-        # ``+=`` per chunk rebuilds the whole string every delta (quadratic on big args).
-        self._argument_parts: dict[int, list[str]] = {}
-
-    def materialize(self) -> dict:
-        """Join buffered argument deltas into each entry's ``arguments``; idempotent. Returns ``acc``."""
-        for idx, parts in self._argument_parts.items():
-            self.acc[idx]["function"]["arguments"] = "".join(parts)
-        return self.acc
-
-    def feed(self, tc_delta) -> Optional[str]:
-        """Merge one delta; return the tool name the first time it is complete."""
-        raw_idx = getattr(tc_delta, "index", None)
-        if raw_idx is None:
-            raw_idx = 0
-        tc_id = getattr(tc_delta, "id", None)
-        delta_id = tc_id or ""
-        if isinstance(tc_id, int):  # Poolside sends integer ids
-            tc_id = str(tc_id)
-
-        self._active_slot_by_idx.setdefault(raw_idx, raw_idx)
-        if delta_id and raw_idx in self._last_id_at_idx and delta_id != self._last_id_at_idx[raw_idx]:
-            self._active_slot_by_idx[raw_idx] = max(self.acc, default=-1) + 1
-        if delta_id:
-            self._last_id_at_idx[raw_idx] = delta_id
-        idx = self._active_slot_by_idx[raw_idx]
-
-        entry = self.acc.setdefault(
-            idx, {"id": tc_id or "", "type": "function", "function": {"name": "", "arguments": ""}, "extra_content": None},
-        )
-        parts = self._argument_parts.setdefault(idx, [])
-        if tc_id:
-            entry["id"] = tc_id
-        tc_function = getattr(tc_delta, "function", None)
-        if tc_function:
-            if getattr(tc_function, "name", None):
-                # Assignment, not +=: names arrive complete and some providers (MiniMax via
-                # NVIDIA NIM) resend the full name every chunk — += gives "read_fileread_file".
-                entry["function"]["name"] = tc_function.name
-            arguments = getattr(tc_function, "arguments", None) or ""
-            if arguments:
-                # A few OpenAI-compatible Gemini gateways omit ``id`` and reuse
-                # ``index=0`` for every call, while sending the complete JSON
-                # object in each event. Appending the next object to the previous
-                # one produces ``}{`` and poisons the next request with HTTP 400.
-                # Keep ordinary fragment deltas, collapse full-argument resends,
-                # and allocate a fresh slot when a new JSON document arrives on
-                # an id-less index.
-                accumulated = "".join(parts)
-                if not delta_id and accumulated:
-                    if arguments.startswith(accumulated):
-                        arguments = arguments[len(accumulated):]
-                    else:
-                        try:
-                            accumulated_complete = json.loads(accumulated)
-                        except (TypeError, ValueError):
-                            accumulated_complete = None
-                        if accumulated_complete is not None and arguments.lstrip().startswith(("{", "[")):
-                            idx = max(self.acc, default=-1) + 1
-                            self._active_slot_by_idx[raw_idx] = idx
-                            entry = self.acc.setdefault(
-                                idx,
-                                {"id": tc_id or "", "type": "function",
-                                 "function": {"name": "", "arguments": ""},
-                                 "extra_content": None},
-                            )
-                            parts = self._argument_parts.setdefault(idx, [])
-                            if getattr(tc_function, "name", None):
-                                entry["function"]["name"] = tc_function.name
-                if arguments:
-                    parts.append(arguments)
-        extra = getattr(tc_delta, "extra_content", None)
-        if extra is None and hasattr(tc_delta, "model_extra"):
-            extra = (tc_delta.model_extra if isinstance(tc_delta.model_extra, dict) else {}).get("extra_content")
-        if extra is not None:
-            entry["extra_content"] = _dump_if_model(extra)
-        name = entry["function"]["name"]
-        if name and idx not in self._notified:
-            self._notified.add(idx)
-            return name
-        return None
-
-
 class _StreamingCall(StreamingWaitMonitor):
     """One streaming request on the chat_completions / anthropic_messages wire.
     State shared between the request worker and the poll-loop monitor (heartbeat,
@@ -3201,7 +3106,7 @@ class _StreamingCall(StreamingWaitMonitor):
         refusal_parts: list[str] = []
         reasoning_details: list = []  # OpenRouter replay data (signatures, encrypted blocks)
         pending_text_parts: list[str] = []
-        tool_calls = _ToolCallAccumulator()
+        tool_calls = ToolCallAccumulator()
         tool_calls_acc = tool_calls.acc
         finish_reason = model_name = usage_obj = None
         response_id = upstream_provider = None  # the provider's own id / serving upstream, from the chunks

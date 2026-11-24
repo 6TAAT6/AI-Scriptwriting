@@ -1,0 +1,7 @@
+interface:
+  display_name: "Movie Development Skill"
+  short_description: "电影剧本开发、诊断、改写、对白与经典案例机制检索"
+  default_prompt: "Use $movie-development-skill to diagnose and improve this film premise, outline, scene, or dialogue."
+
+policy:
+  allow_implicit_invocation: true

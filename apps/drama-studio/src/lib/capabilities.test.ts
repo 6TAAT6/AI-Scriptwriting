@@ -21,26 +21,7 @@ test('技能更名后历史选择仍可恢复，续聊持续启用并允许新�
     { role: 'user', text: '继续优化下一集' }
   ])
   expect(selected).toEqual({ skills: ['humanize'] })
-  expect(selectionAfter(selected, '停用巨豹skill-去AI味')).toEqual({ skills: [] })
-})
-
-test('能力改名后新旧调用仍绑定同一能力，恢复历史后可用新名称停用', () => {
-  for (const [id, current, historical] of [
-    ['gm3-1', '巨豹 Agent-适配巨豹满血版 V1.1', '巨豹 Agent-适配 GM3.1 版本'],
-    ['oa6-1', '巨豹 Agent-适配巨豹测试版 V2.1', '巨豹 Agent-适配 OA6.1 版本'],
-    ['gr4-7', '巨豹 Agent-适配巨豹试用版 V3.0', '巨豹 Agent-适配 GR4.7 版本'],
-    ['outline-script', '巨豹 skill-大纲变剧本', '巨豹大纲变剧本']
-  ]) {
-    const expected = id === 'outline-script' ? { skills: [id] } : { agent: id, skills: [] }
-    const restored = conversationSelection([
-      { role: 'user', text: `调用${historical}` },
-      { role: 'assistant', text: '已处理。' },
-      { role: 'user', text: '继续下一集。' }
-    ])
-    expect(restored).toEqual(expected)
-    expect(selectionAfter({ skills: [] }, `调用${current}`)).toEqual(expected)
-    expect(selectionAfter(restored, `停用${current}`)).toEqual({ skills: [] })
-  }
+  expect(selectionAfter(selected, '停用巨豹 skill · 去 AI 味')).toEqual({ skills: [] })
 })
 
 test('明确的使用和礼貌调用可以选择完整名称，提问、否定和引用不能启用能力', () => {

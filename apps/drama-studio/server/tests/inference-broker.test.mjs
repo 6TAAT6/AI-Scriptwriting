@@ -8,7 +8,7 @@ import path from 'node:path'
 import { createInferenceBroker } from '../inference-broker.mjs'
 
 const CANARY = 'fixture-upstream-private-85632'
-async function fixture(t) {
+async function fixture(t, models = ['model-a', 'model-b']) {
   const received = [], releases = [], heldEvents = new EventEmitter()
   const upstream = createServer(async (req, res) => {
     const chunks = []; for await (const chunk of req) chunks.push(chunk)
@@ -18,6 +18,13 @@ async function fixture(t) {
     if (body.metadata?.test === 'redirect') { res.writeHead(307, { location: 'http://127.0.0.1:1/' + CANARY }); return res.end(CANARY) }
     if (body.metadata?.test === 'error') { res.writeHead(500, { 'x-private-key': CANARY, 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: { message: CANARY } })) }
     if (body.metadata?.test === 'rate-limit') { res.writeHead(429, { 'retry-after': '30' }); return res.end(CANARY) }
+    if (body.metadata?.test === 'in-flight-budget' || body.metadata?.test === 'no-credits') {
+      res.writeHead(402, { 'content-type': 'application/json' })
+      return res.end(JSON.stringify({ error: body.metadata.test === 'no-credits'
+        ? { message: 'Insufficient credits. ' + CANARY, code: 402 }
+        : { message: 'This request would exceed your available credits given your current in-flight requests. ' + CANARY, code: 402,
+            metadata: { reason: 'in_flight_budget_exhausted', headers: { 'Retry-After': '45' } } } }))
+    }
     if (body.metadata?.test === 'json-error') { res.setHeader('content-type', 'application/json'); return res.end(JSON.stringify({ error: { message: CANARY } })) }
     if (body.metadata?.test === 'hold') await new Promise(resolve => { releases.push(resolve); heldEvents.emit('held') })
     if (body.stream) {
@@ -37,7 +44,7 @@ async function fixture(t) {
     res.end(JSON.stringify({ id: 'fixture', model: body.model, choices: [{ message: { content: '正常回复' } }] }))
   })
   upstream.listen(0, '127.0.0.1'); await once(upstream, 'listening')
-  const broker = await createInferenceBroker({ baseUrl: `http://127.0.0.1:${upstream.address().port}/v1`, apiKey: CANARY, models: ['model-a', 'model-b'], defaultModel: 'model-a', apiMode: 'chat_completions' })
+  const broker = await createInferenceBroker({ baseUrl: `http://127.0.0.1:${upstream.address().port}/v1`, apiKey: CANARY, models, defaultModel: models[0], apiMode: 'chat_completions' })
   t.after(async () => { for (const release of releases) release(); await broker.close(); await new Promise(resolve => upstream.close(resolve)) })
   const request = async (scope, route = '/chat/completions', body = { model: 'model-a', messages: [{ role: 'user', content: '你好' }] }, headers = {}) => {
     const res = await fetch(scope.base_url + route, { method: body === null ? 'GET' : 'POST', headers: { authorization: 'Bearer ' + scope.token, ...(body === null ? {} : { 'content-type': 'application/json' }), ...headers }, body: body === null ? undefined : JSON.stringify(body), redirect: 'manual' })
@@ -59,6 +66,19 @@ async function fixture(t) {
   }
   return { broker, received, releases, request, waitHeld, startRequest, upstreamBase: `http://127.0.0.1:${upstream.address().port}/v1` }
 }
+
+test('其他中转的 Gemini 请求保留原始 schema 与消息', async t => {
+  const f = await fixture(t, ['gemini-4-hydrogen', 'model-a']), scope = f.broker.scope('schema')
+  const schema = { type: 'object', required: ['constraint'], additionalProperties: false, properties: {
+    constraint: { type: ['object', 'null'], properties: { minimum: { type: ['integer', 'null'], minimum: 0 } } }
+  } }
+  const body = { model: 'gemini-4-hydrogen', messages: [{ role: 'user', content: '原文' }],
+    response_format: { type: 'json_schema', json_schema: { name: 'requirements', strict: false, schema } } }
+  assert.equal((await f.request(scope, '/chat/completions', body)).status, 200)
+  assert.deepEqual(f.received[0].body.response_format, body.response_format)
+  assert.deepEqual(f.received[0].body.messages, body.messages)
+  assert.equal(f.received[0].body.stream, undefined)
+})
 
 test('带多张截图的原生视觉请求可通过代理，超出输入总量仍被拒绝', async t => {
   const f = await fixture(t), scope = f.broker.scope('images')
@@ -135,6 +155,16 @@ test('推理代理拒绝越权及越界请求，上游异常和SSE错误不会�
   assert.equal(limited.headers.get('retry-after'), '30')
   assert.equal(JSON.parse(limited.text).error.code, 'provider_rate_limited')
   assert.ok(!limited.text.includes(CANARY))
+  // OpenRouter 进行中请求占满额度：按限流转发并带等待时间，员工进程可重试；余额耗尽仍是不可重试的拒绝。
+  const inFlight = await f.request(a, '/chat/completions', { model: 'model-a', metadata: { test: 'in-flight-budget' } })
+  assert.equal(inFlight.status, 429)
+  assert.equal(inFlight.headers.get('retry-after'), '45')
+  assert.equal(JSON.parse(inFlight.text).error.code, 'provider_rate_limited')
+  assert.ok(!inFlight.text.includes(CANARY))
+  const depleted = await f.request(a, '/chat/completions', { model: 'model-a', metadata: { test: 'no-credits' } })
+  assert.equal(depleted.status, 402)
+  assert.equal(depleted.headers.get('retry-after'), null)
+  assert.equal(JSON.parse(depleted.text).error.code, 'provider_request_rejected')
   const held = Array.from({ length: 10 }, () => f.request(a, '/chat/completions', { model: 'model-a', metadata: { test: 'hold' } }))
   await f.waitHeld(10)
   const queued = f.startRequest(a)

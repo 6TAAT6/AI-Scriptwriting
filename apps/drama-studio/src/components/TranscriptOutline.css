@@ -1,0 +1,32 @@
+.transcript-shell { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; container-type: inline-size; }
+.transcript-shell > .transcript-scroll { min-width: 0; }
+.transcript-shell .transcript-content { padding-left: 48px; }
+.transcript-outline { position: absolute; z-index: 15; top: 22px; bottom: 22px; left: 4px; width: 36px; display: flex; align-items: center; pointer-events: none; animation: outline-enter var(--motion-slow) var(--motion-ease); }
+.outline-track { position: relative; width: 36px; max-height: 100%; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; padding: 5px 0; pointer-events: auto; border-radius: 12px; transition: background var(--motion-normal) ease; }
+.outline-track::-webkit-scrollbar { display: none; }
+.outline-track:hover, .outline-track:focus-within { background: color-mix(in srgb, var(--panel) 92%, transparent); }
+.outline-tick { display: flex; width: 36px; height: 14px; align-items: center; justify-content: center; border-radius: 4px; }
+.outline-tick > span { display: block; width: 6px; height: 2px; border-radius: 2px; background: var(--muted); opacity: .36; transition: width var(--motion-normal) var(--motion-ease), opacity var(--motion-normal) ease, background var(--motion-normal) ease, transform var(--motion-normal) var(--motion-ease); }
+.outline-tick.is-major > span { width: 11px; opacity: .5; }
+.outline-tick[aria-current] > span { width: 22px; background: var(--purple); opacity: 1; }
+.outline-tick:hover > span, .outline-tick:focus-visible > span { width: 25px; background: var(--purple); opacity: 1; transform: scaleY(1.3); }
+.outline-tick:focus-visible { outline-offset: -2px; }
+.outline-preview { position: absolute; left: 42px; width: min(324px, calc(100cqw - 60px)); padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-popover); pointer-events: none; animation: outline-preview-enter var(--motion-normal) var(--motion-ease); }
+.outline-preview-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.outline-preview strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 12px; font-weight: 550; line-height: 1.7; overflow-wrap: anywhere; }
+.outline-preview p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin: 4px 0 8px; color: var(--subtle); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.outline-preview-hint { color: var(--muted); font-size: 10px; }
+@keyframes outline-enter { from { opacity: 0; transform: translateX(-5px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes outline-preview-enter { from { opacity: 0; transform: translateX(-5px) scale(.98); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@media (max-width: 760px) {
+  .transcript-outline { left: 0; width: 30px; top: 14px; bottom: 14px; }
+  .outline-track, .outline-tick { width: 30px; }
+  .transcript-shell .transcript-content { padding-left: 38px; padding-right: 18px; }
+  .outline-preview { left: 34px; }
+}
+@media (pointer: coarse) {
+  .outline-tick { height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .transcript-outline, .outline-preview, .outline-tick > span { animation: none; transition: none; }
+}

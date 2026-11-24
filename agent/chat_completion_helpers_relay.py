@@ -12,13 +12,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from agent.chat_completion_helpers import _ToolCallAccumulator
+from agent.chat_completion_tool_calls import ToolCallAccumulator
 from agent.message_content import flatten_message_text
 from agent.reasoning_summaries import separate_glued_reasoning_blocks
 
 
 def _tool_call_delta_view(tc_delta: Any) -> Any:
-    """Attribute view of a JSON tool-call delta for ``_ToolCallAccumulator.feed`` (written
+    """Attribute view of a JSON tool-call delta for ``ToolCallAccumulator.feed`` (written
     against SDK objects). Only ``function`` is wrapped: ``feed`` passes ``extra_content``
     (a dict) straight through ``_dump_if_model``, so a recursive view would corrupt it."""
     if not isinstance(tc_delta, dict):
@@ -36,7 +36,7 @@ class RelayChatAccumulator:
         self._reasoning: list[str] = []
         self._refusal: list[str] = []  # OpenAI ``delta.refusal`` — a refusal is content, not an empty stream
         self._reasoning_details: list[Any] = []  # opaque provider records (signed blocks); order preserved verbatim
-        self._tool_calls = _ToolCallAccumulator()
+        self._tool_calls = ToolCallAccumulator()
         self._model = self._usage = self._finish_reason = None
         self._role = "assistant"
 

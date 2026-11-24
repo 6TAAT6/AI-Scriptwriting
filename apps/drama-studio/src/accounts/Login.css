@@ -3,13 +3,14 @@
   isolation: isolate;
   min-height: 100dvh;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   gap: 28px;
   padding: max(28px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
   background: var(--sidebar);
   color: var(--text);
 }
-.studio-login > :not(.login-backdrop) { position: relative; z-index: 1; }
+.studio-login > :not(.login-backdrop) { position: relative; z-index: 1; min-width: 0; }
 .login-brand { width: min(1120px, 100%); margin: 0 auto; }
 .login-brand .studio-brand { gap: 11px; }
 .login-brand .studio-brand-mark { width: 36px; height: 36px; }
@@ -29,30 +30,120 @@
 }
 .login-icon { width: 42px; height: 42px; margin: 0 auto 16px; display: grid; place-items: center; }
 .login-icon img { display: block; width: 42px; height: 42px; object-fit: contain; }
-.login-card h1 { margin: 0; font-size: 22px; line-height: 1.4; font-weight: 650; letter-spacing: -.6px; text-align: center; text-wrap: balance; }
-.login-description { margin: 8px 0 22px; font-size: 12px; line-height: 1.8; color: var(--subtle); text-align: center; }
+.login-card h1 { margin: 0; font-size: 20px; line-height: 1.4; font-weight: 600; letter-spacing: -.6px; text-align: center; text-wrap: balance; }
+.login-description { margin: 8px 0 22px; font-size: 13px; line-height: 1.8; color: var(--subtle); text-align: center; }
 .login-card .account-form { gap: 16px; }
-.login-card .account-field { gap: 8px; }
-.login-card .account-field > span, .login-card .account-field > label { color: var(--text); font-size: 13px; font-weight: 500; }
+.login-card .account-field { gap: 8px; min-width: 0; }
+.login-card .account-field > span, .login-card .account-field > label { color: var(--text); font-size: 14px; font-weight: 500; }
 .login-card .account-field > input, .login-card .account-password { min-height: 42px; border-radius: 9px; border-color: color-mix(in srgb, var(--border) 75%, var(--muted)); background: var(--panel); }
-.login-card .account-field > input, .login-card .account-password > input { font-size: 13px; padding: 10px 12px; }
+.login-card .account-field > input, .login-card .account-password > input { font-size: 14px; padding: 10px 12px; scroll-margin-block: 24px; }
 .login-card .account-password { padding-right: 3px; }
 .login-card .account-password > input { border-radius: inherit; }
 .login-card .account-password .icon-button { width: 36px; height: 36px; border-radius: 8px; touch-action: manipulation; }
 .login-card .account-password .icon-button:focus-visible { outline-offset: -4px; }
 .login-card .account-field > input:focus, .login-card .account-password:focus-within { border-color: var(--purple); background: var(--surface); box-shadow: 0 0 0 3px color-mix(in srgb, var(--purple) 12%, transparent); }
-.login-card .login-submit { width: 100%; min-height: 42px; margin-top: 4px; border-radius: 9px; background: #7655d8; color: #fff; font-size: 14px; font-weight: 550; gap: 10px; touch-action: manipulation; }
+.login-card .login-submit { width: 100%; min-height: 42px; margin-top: 4px; border-radius: 9px; background: var(--purple-fill); color: #fff; font-size: 14px; font-weight: 500; gap: 10px; touch-action: manipulation; }
 .login-card .login-submit:not(:disabled):hover { background: #6848c8; }
 .login-card .login-submit:disabled { opacity: .72; }
-.login-card .account-notice { font-size: 12px; padding: 11px 13px; }
-.login-hint { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--subtle); font-size: 12px; line-height: 1.7; text-align: center; }
-.login-footer { justify-self: center; color: var(--muted); font-size: 12px; line-height: 1.8; text-align: center; }
-@media (max-width: 600px) {
-  .studio-login { gap: 24px; padding: max(22px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
-  .login-card { padding: 24px 22px 20px; border-radius: 18px; margin: 0; }
-  .login-card h1 { font-size: 22px; }
-  .login-description { margin-bottom: 20px; }
-  .login-card .account-field > input, .login-card .account-password > input { font-size: 16px; }
+.login-card .account-notice { font-size: 13px; padding: 11px 13px; }
+.login-hint { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--subtle); font-size: 13px; line-height: 1.7; text-align: center; }
+.login-footer { justify-self: center; color: var(--muted); font-size: 13px; line-height: 1.8; text-align: center; }
+@media (max-width: 600px), (max-width: 900px) and (max-height: 700px) {
+  .studio-login { gap: 20px; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .login-brand { text-align: center; }
+  .login-brand .studio-brand { text-align: left; }
+  .login-brand .studio-test-badge { display: none; }
+  .login-card { padding: 24px 20px 20px; border-radius: 16px; margin: 0; }
+  .login-icon { display: none; }
+  .login-card h1 { font-size: 20px; }
+  .login-description { margin-bottom: 18px; }
+  .login-card .account-form { gap: 14px; }
+  .login-card .account-field { gap: 6px; }
+  .login-card .account-field > input, .login-card .account-password { min-height: 48px; }
+  .login-card .account-field > input, .login-card .account-password > input { font-size: 16px; line-height: 1.5; }
+  .login-card .account-password { padding-right: 1px; }
+  .login-card .account-password .icon-button { width: 44px; height: 44px; }
+  .login-card .login-submit { min-height: 48px; font-size: 16px; }
+  .login-hint { margin-top: 16px; padding-top: 14px; }
   .login-brand .studio-brand-mark { width: 32px; height: 32px; }
-  .login-footer { font-size: 11px; }
+  .login-footer { font-size: 12px; }
+}
+
+@media (max-width: 900px) and (max-height: 700px) {
+  .studio-login { grid-template-rows: auto auto; align-content: start; gap: 14px; padding-top: max(14px, env(safe-area-inset-top)); padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+  .login-card { align-self: start; padding-top: 20px; padding-bottom: 18px; }
+  .login-icon, .login-footer { display: none; }
+}
+
+.login-environment { display: flex; justify-content: center; margin-top: 10px; }
+.login-environment .studio-test-badge { padding: 4px 12px; font-size: 13px; }
+.login-company-login { display: grid; gap: 8px; margin: 0 0 16px; }
+.company-login-landing { position: relative; }
+.developer-login-link { display: block; margin: 14px auto 0; border: 0; padding: 4px 6px; color: #8b8799; background: transparent; font-size: 11px; opacity: .58; cursor: pointer; }
+.developer-login-link:hover, .developer-login-link:focus-visible { opacity: 1; color: #5c4d8a; }
+
+/* 登录卡片按整个视口居中；品牌和底部文案不再占用卡片的垂直居中空间。 */
+.studio-login { display: flex; align-items: center; justify-content: center; }
+.login-brand { position: absolute; top: max(28px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); }
+.login-footer { position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); white-space: nowrap; }
+.login-card { align-self: auto; margin: 0; }
+
+/* 登录页只调整位置：品牌在左上角，登录卡片保持视口居中。 */
+.studio-login .login-brand {
+  position: absolute;
+  top: max(28px, env(safe-area-inset-top));
+  left: max(24px, env(safe-area-inset-left));
+  width: auto;
+  margin: 0;
+  transform: none;
+  text-align: left;
+}
+.studio-login .login-brand .studio-brand { text-align: left; }
+.studio-login .login-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  transform: translate(-50%, -50%);
+}
+.studio-login .login-footer {
+  position: absolute;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: 50%;
+  margin: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.studio-login .developer-back-button {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  padding: 0;
+  border-radius: 7px;
+  color: var(--subtle);
+  background: transparent;
+  cursor: pointer;
+}
+.studio-login .developer-back-button:hover,
+.studio-login .developer-back-button:focus-visible { color: var(--purple); background: color-mix(in srgb, var(--purple) 10%, transparent); }
+
+@media (max-width: 600px), (max-width: 900px) and (max-height: 700px) {
+  .studio-login .login-brand {
+    top: max(20px, env(safe-area-inset-top));
+    left: max(16px, env(safe-area-inset-left));
+  }
+  .studio-login .developer-back-button { top: 10px; left: 10px; }
+  .studio-login .login-card {
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+  }
 }

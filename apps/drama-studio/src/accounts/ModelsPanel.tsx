@@ -1,7 +1,7 @@
 import { ModelNamesPanel } from './ModelNamesPanel'
-import { KeyRound, LoaderCircle, Plus, RefreshCw } from 'lucide-react'
+import { KeyRound, LoaderCircle, Plus, Power, RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { listModelEndpoints, saveModelEndpoint, validateModelEndpoint, type ModelEndpoint, type ModelEndpointInput } from './api'
+import { listModelEndpoints, saveModelEndpoint, setModelEndpointEnabled, validateModelEndpoint, type ModelEndpoint, type ModelEndpointInput } from './api'
 import { FormNotice } from './Fields'
 import './ModelsPanel.css'
 import { SelectMenu } from '../components/SelectMenu'
@@ -15,6 +15,7 @@ export function ModelsPanel() {
   const [apiKey, setApiKey] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<'save' | 'test' | null>(null)
+  const [switching, setSwitching] = useState('')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   useEffect(() => {
@@ -50,6 +51,16 @@ export function ModelsPanel() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : '模型接入操作未完成。') }
     finally { setBusy(null) }
   }
+  async function toggle(endpoint: ModelEndpoint) {
+    if (switching || busy) return
+    setSwitching(endpoint.id); setError(''); setMessage('')
+    try {
+      const result = await setModelEndpointEnabled(endpoint.id, endpoint.enabled === false)
+      setEndpoints(result.endpoints); setMessage(result.message)
+      window.dispatchEvent(new Event('studio:models-changed'))
+    } catch (reason) { setError(reason instanceof Error ? reason.message : '接入状态未能切换，请稍后重试。') }
+    finally { setSwitching('') }
+  }
   return <section className="models-panel">
     <header className="account-page-heading"><div><h2>模型接入</h2><p>由超级管理员统一配置。成员可在新建对话时选择已接入的模型。</p></div><button type="button" className="primary-button" disabled={Boolean(busy)} onClick={() => edit()}><Plus size={15} />新增接入</button></header>
     {!form && <div className="models-toolbar"><span>已配置 {endpoints.length} 个接入</span><button type="button" className="secondary-button" disabled={loading} onClick={() => void refresh()}><RefreshCw size={14} />刷新</button></div>}
@@ -64,7 +75,7 @@ export function ModelsPanel() {
       <div className="account-field"><label htmlFor="model-key">API Key</label><input id="model-key" type="password" value={apiKey} required={!form.id} disabled={Boolean(busy)} onChange={event => setApiKey(event.target.value)} autoComplete="new-password" spellCheck={false} placeholder={form.id ? '留空保留已保存的密钥' : '输入服务提供的 API Key'} /><small>密钥仅保存在服务端，保存后不再显示。检查连接只读取模型目录。</small></div>
       <div className="account-field"><label htmlFor="image-model">生图模型</label><input id="image-model" value={form.image_model || ''} disabled={Boolean(busy)} onChange={event => setForm({ ...form, image_model: event.target.value.trim(), image_models: event.target.value.trim() ? [event.target.value.trim()] : [] })} placeholder="例如：gpt-image-2；留空关闭生图" /><small>使用这个接入的服务地址和密钥，通过图片接口生成。图片模型不进入聊天模型列表。</small></div>
       <div className="models-actions"><button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => { setForm(null); setApiKey(''); setError(''); setMessage('') }}>取消</button><button type="button" className="secondary-button" disabled={Boolean(busy) || !apiKey} onClick={() => void submit('test')}>{busy === 'test' && <LoaderCircle size={14} className="account-spin" />}检查连接</button><button type="submit" className="primary-button" disabled={Boolean(busy)}>{busy === 'save' && <LoaderCircle size={14} className="account-spin" />}保存接入</button></div>
-    </form> : loading ? <p className="models-empty" role="status">正在读取模型接入…</p> : <div className="models-list">{endpoints.length ? endpoints.map(endpoint => <article key={endpoint.id} className="models-card"><div className="models-card-top"><span className="models-icon"><KeyRound size={17} /></span><div><h3>{endpoint.name}</h3><p>{endpoint.api_mode === 'codex_responses' ? 'Responses' : 'Chat Completions'} · {endpoint.models.length} 个模型</p></div><button type="button" className="secondary-button" aria-label={`编辑${endpoint.name}`} onClick={() => edit(endpoint)}>编辑</button></div><p className="models-address">{endpoint.base_url}</p><div className="models-card-footer"><span>{endpoint.model}</span><span className={endpoint.has_api_key ? 'models-configured' : ''}>{endpoint.has_api_key ? '密钥已配置' : '未配置密钥'}</span></div></article>) : <p className="models-empty">还没有接入模型，点击“新增接入”开始配置。</p>}</div>}
-    {!form && <ModelNamesPanel key={endpoints.map(row => `${row.id}:${row.models.join()}:${row.image_models?.join()}`).join(";")} />}
+    </form> : loading ? <p className="models-empty" role="status">正在读取模型接入…</p> : <div className="models-list">{endpoints.length ? endpoints.map(endpoint => <article key={endpoint.id} className="models-card"><div className="models-card-top"><span className="models-icon"><KeyRound size={17} /></span><div><h3>{endpoint.name}{endpoint.enabled === false && <span className="models-disabled" title="员工新建对话时不可选，品牌入口也不能绑定到这个接入。">已停用</span>}</h3><p>{endpoint.api_mode === 'codex_responses' ? 'Responses' : 'Chat Completions'} · {endpoint.models.length} 个模型</p></div><div className="models-card-actions">{endpoint.is_current ? <span className="models-default" title="员工对话和上下文压缩都依赖默认接入，不能停用。">默认接入</span> : <button type="button" className={endpoint.enabled === false ? 'secondary-button models-toggle is-off' : 'secondary-button models-toggle'} role="switch" aria-checked={endpoint.enabled !== false} aria-label={`${endpoint.enabled === false ? '启用' : '停用'}${endpoint.name}`} disabled={Boolean(switching) || Boolean(busy)} onClick={() => void toggle(endpoint)}>{switching === endpoint.id ? <LoaderCircle size={14} className="account-spin" /> : <Power size={14} />}{endpoint.enabled === false ? '启用' : '停用'}</button>}<button type="button" className="secondary-button" aria-label={`编辑${endpoint.name}`} onClick={() => edit(endpoint)}>编辑</button></div></div><p className="models-address">{endpoint.base_url}</p><div className="models-card-footer"><span>{endpoint.model}</span><span className={endpoint.has_api_key ? 'models-configured' : ''}>{endpoint.has_api_key ? '密钥已配置' : '未配置密钥'}</span></div></article>) : <p className="models-empty">还没有接入模型，点击“新增接入”开始配置。</p>}</div>}
+    {!form && <ModelNamesPanel key={endpoints.map(row => `${row.id}:${row.enabled !== false}:${row.models.join()}:${row.image_models?.join()}`).join(";")} />}
   </section>
 }

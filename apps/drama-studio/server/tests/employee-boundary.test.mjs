@@ -1,3 +1,4 @@
+import { fixtureModelEndpoints, fixtureModelCatalog } from './model-fixtures.mjs'
 import { fixtureActivationCode } from './account-fixtures.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -23,6 +24,7 @@ async function fixture(t, { emptySessionDatabase = false } = {}) {
     { role: 'tool', tool_call_id: 'tool-a', name: 'drama_project_status', content: JSON.stringify({ ok: true, project: project(profile), debug: CANARY }) },
     { role: 'assistant', content: '可以开始创作。', reasoning: CANARY, tool_calls: [{ function: { arguments: CANARY } }] }]
   const be = createServer(async (req, res) => {
+    if(fixtureModelEndpoints(req,res,[{id:'configured',name:'测试接入',models:['approved-model']}]))return;
     if (req.url === '/') return res.end('<script>window.__HERMES_SESSION_TOKEN__="fixture-only-token";</script>')
     const url = new URL(req.url, 'http://localhost'), profile = url.searchParams.get('profile')
     if (url.pathname === '/api/studio/model-endpoints') { res.setHeader('content-type', 'application/json'); return res.end(JSON.stringify({ endpoints: [{ id: 'configured', name: '测试接入', models: ['approved-model'] }] })) }
@@ -67,8 +69,10 @@ async function fixture(t, { emptySessionDatabase = false } = {}) {
           open_requests: [{ jsonrpc: '2.0', id: 'replay-system', method: 'secret', params: { session_id: p.session_id, prompt: CANARY } }] },
         'gateway.ping': { pong: true, debug: CANARY }
       }
+      if(frame.method==='model.options')results['model.options']=fixtureModelCatalog(p.profile,results['model.options'])
       if (frame.method === 'session.interrupt') ws.send(JSON.stringify({ jsonrpc: '2.0', id: frame.id, error: { code: 5033, message: CANARY, data: { api_key: CANARY } } }))
       else ws.send(JSON.stringify({ jsonrpc: '2.0', id: frame.id, result: results[frame.method] || { ok: true } }))
+      if(frame.method==='prompt.submit')ws.send(JSON.stringify({jsonrpc:'2.0',method:'event',params:{type:'message.complete',session_id:p.session_id,payload:{status:'complete',text:''}}}))
     })
   })
   be.listen(0, '127.0.0.1'); await once(be, 'listening')
@@ -110,6 +114,8 @@ async function fixture(t, { emptySessionDatabase = false } = {}) {
       const cb = data => { const frame = JSON.parse(data); if (frame.id === key) { clearTimeout(timer); ws.off('message', cb); resolve(frame) } }
       ws.on('message', cb); ws.send(JSON.stringify({ jsonrpc: '2.0', id: key, method, params }))
     })
+    // 与真实前端一致：连接后先读取模型目录，网关据此为未指定模型的新会话选择默认模型。
+    await rpc('model.options')
     return { ws, rpc, frames }
   }
   t.after(async () => { await edge.close(); for (const peer of peers) peer.terminate(); await new Promise(resolve => wss.close(resolve)); await Promise.all([new Promise(resolve => server.close(resolve)), new Promise(resolve => be.close(resolve))]); await rm(root, { recursive: true, force: true }) })

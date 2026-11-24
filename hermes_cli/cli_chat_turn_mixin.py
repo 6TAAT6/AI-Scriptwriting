@@ -80,6 +80,7 @@ class CLIChatTurnMixin:
         if agent is None:
             return None
         self._sync_fallback_chain_with_config(agent)  # chain added after this chat opened reaches this turn
+        self._context_reference_metadata = {}
         message = self._chat_route_images(message, images)
 
         if isinstance(message, str) and not isinstance(message, TimelineNotification):
@@ -156,6 +157,7 @@ class CLIChatTurnMixin:
         of running the turn when injection was refused, else None.
         """
         from cli import _DIM, _RST, _cprint
+        self._context_reference_metadata = {}
         if "@" not in message:
             return message, None
         try:
@@ -174,6 +176,7 @@ class CLIChatTurnMixin:
                 if _ctx_result.blocked:
                     return message, ("\n".join(_ctx_result.warnings) or t("cli.chat.context_injection_refused"))
                 message = _ctx_result.message
+                self._context_reference_metadata = _ctx_result.requirement_metadata
         except Exception as e:
             logging.debug("@ context reference expansion failed: %s", e)
         return message, None
@@ -236,6 +239,9 @@ class CLIChatTurnMixin:
             agent._persist_user_message_override = None
             agent._persist_user_message_timestamp = None
             staged_user_message = stamp_message_timestamp({"role": "user", "content": message})
+            if getattr(self, "_context_reference_metadata", None):
+                staged_user_message["display_metadata"] = self._context_reference_metadata
+            self._context_reference_metadata = {}
             from tools.process_registry_notifications import TimelineNotification
             if isinstance(message, TimelineNotification):
                 staged_user_message.update(content=str(message), display_kind=message.display_kind,

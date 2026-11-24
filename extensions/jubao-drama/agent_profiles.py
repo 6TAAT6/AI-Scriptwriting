@@ -1,4 +1,4 @@
-"""三个按需加载的剧本 Agent 及其会话绑定。"""
+"""按能力目录加载剧本 Agent，并保存各自的会话绑定。"""
 
 from __future__ import annotations
 
@@ -39,6 +39,17 @@ def display_name(agent_id: str) -> str:
         return AGENT_PROFILES[agent_id]["display_name"]
     except KeyError:
         raise ValueError("未知剧本 Agent") from None
+
+
+def own_protocol(session_id) -> bool:
+    """所选主 Agent 自带完整流程、格式与收尾规则时，宿主不再叠加通用创作工作流。"""
+    agent_id = active_agent(session_id)
+    return bool(agent_id and AGENT_PROFILES.get(agent_id, {}).get("own_protocol"))
+
+
+def active_profile(session_id) -> dict:
+    """当前会话所选主 Agent 的能力条目；未选择时为空，调用方按产品默认处理。"""
+    return AGENT_PROFILES.get(active_agent(session_id) or "", {})
 
 
 def _table(conn) -> None:
@@ -88,7 +99,7 @@ def activate_agent(session_id: str, agent_id: str, *, replace=False) -> str:
         raise ValueError("未知剧本 Agent")
     inherited = active_agent(session_id)
     if inherited and inherited != agent_id and not replace:
-        raise ValueError("不能在同一会话混用三个剧本 Agent，请先在用户消息中选择新的 Agent")
+        raise ValueError("不能在同一会话混用多个剧本 Agent，请先在用户消息中选择新的 Agent")
     with closing(plugin_db("jubao-drama")) as conn:
         _table(conn)
         conn.execute("BEGIN IMMEDIATE")
@@ -96,7 +107,7 @@ def activate_agent(session_id: str, agent_id: str, *, replace=False) -> str:
             "SELECT agent_id FROM drama_agent_sessions WHERE session_id = ?", (session_id,)
         ).fetchone()
         if row and row[0] != agent_id and not replace:
-            raise ValueError("不能在同一会话混用三个剧本 Agent，请先在用户消息中选择新的 Agent")
+            raise ValueError("不能在同一会话混用多个剧本 Agent，请先在用户消息中选择新的 Agent")
         conn.execute(
             "INSERT INTO drama_agent_sessions(session_id, agent_id, updated_at) VALUES (?, ?, ?) "
             "ON CONFLICT(session_id) DO UPDATE SET agent_id=excluded.agent_id, updated_at=excluded.updated_at",
@@ -139,7 +150,7 @@ def requested_agent(session_id: str) -> str | None:
 def require_agent(session_id: str) -> str:
     agent_id = active_agent(session_id)
     if not agent_id:
-        raise PermissionError("请先调用三个剧本 Agent 之一，再使用剧本创作工具")
+        raise PermissionError("请先调用一个剧本 Agent，再使用剧本创作工具")
     return agent_id
 
 

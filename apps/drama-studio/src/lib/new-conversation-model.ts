@@ -3,8 +3,11 @@ import { modelReasoning, type StudioModelOptions } from './reasoning'
 
 export function resolveNewConversationModel(catalog: StudioModelOptions, role?: string | null, selection: SessionLiveInfo = {}): SessionLiveInfo {
   const employeeDefault = !selection.model && (role === 'admin' || role === 'employee')
-  const model = selection.model || catalog.model
-  const preferredProvider = selection.provider || catalog.provider
+  const available = catalog.providers.flatMap(provider => provider.authenticated === false ? [] : (provider.models ?? [])
+    .filter(model => !provider.unavailable_models?.includes(model)).map(model => ({ model, provider: provider.slug })))
+  const first = available.find(row => row.model === 'brand-text-1') || available[0]
+  const model = selection.model || first?.model || catalog.model
+  const preferredProvider = selection.model ? selection.provider || catalog.provider : first?.provider || catalog.provider
   const candidates = catalog.providers.filter(row => row.authenticated !== false && model && row.models?.includes(model)
     && !row.unavailable_models?.includes(model))
   const preferred = candidates.filter(row => row.slug === preferredProvider || row.aliases?.includes(preferredProvider || ''))

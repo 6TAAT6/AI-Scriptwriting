@@ -34,9 +34,10 @@ export function AccountsSettings({ onClose, initialSection }: AccountsSettingsPr
   }, [closing])
   if (!user) return null
   const canManage = user.role !== 'employee'
+  const isCompanyAccount = user.auth_source === 'company'
   async function signOut() {
     setBusy(true); setError('')
-    try { await logout() }
+    try { await logout({ switchCompany: isCompanyAccount }) }
     catch (reason) { setError(reason instanceof Error ? reason.message : '退出失败，请重试。'); setBusy(false) }
   }
   return <dialog ref={dialog} className={`accounts-dialog${closing ? ' is-closing' : ''}`} aria-labelledby="accounts-title" onClose={onClose}
@@ -53,7 +54,7 @@ export function AccountsSettings({ onClose, initialSection }: AccountsSettingsPr
           {user.role === 'super_admin' && <button type="button" className={tab === 'models' ? 'is-active' : ''} aria-current={tab === 'models' ? 'page' : undefined} onClick={() => setTab('models')}><KeyRound size={17} />模型接入</button>}
           {user.role === 'super_admin' && <button type="button" className={tab === 'activation' ? 'is-active' : ''} aria-current={tab === 'activation' ? 'page' : undefined} onClick={() => setTab('activation')}><TicketCheck size={17} />激活码管理</button>}
           <button type="button" className={tab === 'archived' ? 'is-active' : ''} aria-current={tab === 'archived' ? 'page' : undefined} onClick={() => setTab('archived')}><Archive size={17} />已归档</button>
-          <div className="accounts-nav-bottom"><div className="accounts-identity"><span className="account-avatar">{(user.display_name || user.username).slice(0, 1)}</span><span><strong>{user.display_name || user.username}</strong><small><ShieldCheck size={12} />{roleLabels[user.role]}</small></span></div><FormNotice error={error} /><button type="button" disabled={busy} aria-busy={busy} onClick={() => void signOut()}>{busy ? <LoaderCircle size={16} className="account-spin" /> : <LogOut size={16} />}{busy ? '正在退出…' : '退出登录'}</button></div>
+          <div className="accounts-nav-bottom"><div className="accounts-identity"><span className="account-avatar">{(user.display_name || user.username).slice(0, 1)}</span><span><strong>{user.display_name || user.username}</strong><small><ShieldCheck size={12} />{roleLabels[user.role]}</small></span></div><FormNotice error={error} /><button type="button" disabled={busy} aria-busy={busy} onClick={() => void signOut()}>{busy ? <LoaderCircle size={16} className="account-spin" /> : <LogOut size={16} />}{busy ? '正在退出…' : isCompanyAccount ? '切换公司账号' : '退出登录'}</button></div>
         </nav>
         <div className="accounts-content" key={tab}>
           {tab === 'account' && <AccountPanel key={user.id} user={user} />}

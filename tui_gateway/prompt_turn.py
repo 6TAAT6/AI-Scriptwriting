@@ -502,6 +502,7 @@ class _TurnRun:
     prompt_text: str = ""
     marker_key: str = ""
     receipt_attempted: bool = False
+    context_reference_metadata: dict = dataclasses.field(default_factory=dict)
 
 
 def _adopt_out_of_band_turns(session: dict) -> None:
@@ -717,6 +718,7 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
                 "error", sid, {"message": "\n".join(ctx.warnings) or "Context injection refused."})
             return None
         prompt = ctx.message
+        st.context_reference_metadata = ctx.requirement_metadata
     st.prompt_text = prompt if isinstance(prompt, str) else ""
     run_message: Any = _route_turn_images(agent, prompt, images) if images else prompt
     from agent.notification_presentation import event_presentation_muted
@@ -786,8 +788,9 @@ def _invoke_agent(
         run_kwargs["task_id"] = session["session_key"]
     if display_kind and "persist_user_display_kind" in run_params:
         run_kwargs["persist_user_display_kind"] = display_kind
-    if display_metadata and "persist_user_display_metadata" in run_params:
-        run_kwargs["persist_user_display_metadata"] = display_metadata
+    metadata = {**(display_metadata or {}), **st.context_reference_metadata}
+    if metadata and "persist_user_display_metadata" in run_params:
+        run_kwargs["persist_user_display_metadata"] = metadata
     if turn_author and "turn_author" in run_params:
         run_kwargs["turn_author"] = turn_author
     _adopt_submit_user_row(session, agent, run_kwargs["persist_user_message"], text)

@@ -46,7 +46,9 @@ export function startWorkspaceSync() {
     finally { syncing = false }
   }
   const wake = () => { if (document.visibilityState !== 'hidden') void synchronize(true, true) }
-  const modelsChanged = () => { void synchronize(false, true) }
+  // 目录下架在生成过程中也要及时可见，只刷新目录，不恢复历史或切换当前模型。
+  const modelsChanged = () => { if (active() && gateway.connectionState === 'open') void workspace.refreshModels() }
+  const unsubscribeModels = gateway.onAny(event => { if ((event.type as string) === 'studio.models.changed') modelsChanged() })
   const poll = setInterval(() => { void synchronize() }, 20_000)
   window.addEventListener('focus', wake)
   window.addEventListener('online', wake)
@@ -55,6 +57,7 @@ export function startWorkspaceSync() {
   document.addEventListener('visibilitychange', wake)
   stop = () => {
     disposed = true; clearInterval(poll); clearTimeout(recoveryTimer)
+    unsubscribeModels()
     window.removeEventListener('focus', wake)
     window.removeEventListener('online', wake)
     window.removeEventListener('studio:reconnected', recover)

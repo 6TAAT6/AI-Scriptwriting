@@ -1,9 +1,14 @@
 .studio-brand { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
 .studio-brand-mark { display: block; object-fit: contain; width: 30px; height: 30px; flex-shrink: 0; }
 .studio-brand-copy { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.studio-brand-copy strong { font-size: 15px; font-weight: 650; letter-spacing: -.35px; white-space: nowrap; color: var(--text); }
-.studio-brand-copy small { font-size: 11px; color: var(--muted); }
-.studio-brand-copy .studio-brand-version { align-self: flex-start; padding: 2px 6px; border-radius: 5px; background: var(--hover); color: var(--muted); font-size: 10px; line-height: 1.3; font-weight: 500; letter-spacing: .15px; }
+.studio-brand-copy strong { font-size: 16px; font-weight: 600; letter-spacing: -.35px; white-space: nowrap; color: var(--text); }
+.studio-brand-copy small { font-size: 12px; color: var(--muted); }
+.studio-brand-copy .studio-brand-version { align-self: flex-start; padding: 2px 6px; border-radius: 5px; background: var(--hover); color: var(--muted); font-size: 12px; line-height: 1.3; font-weight: 500; letter-spacing: .15px; }
 .sidebar-brand > .studio-brand { flex: 1; }
+/* 侧栏品牌区高 65px：名称一行，测试标识与版本号并排一行，避免三行时名称被裁掉。 */
+.sidebar-brand .studio-brand-copy { display: grid; grid-template-columns: auto auto; justify-content: start; align-items: center; gap: 4px 6px; }
+.sidebar-brand .studio-brand-copy strong { grid-column: 1 / -1; }
 .welcome-mark .studio-brand-mark { width: 52px; height: 52px; border-radius: 0; box-shadow: none; }
 .studio-brand-mark-only { gap: 0; }
+
+.studio-test-badge { display: inline-flex; align-items: center; align-self: flex-start; flex-shrink: 0; width: fit-content; padding: 3px 8px; border: 1px solid var(--badge-border); border-radius: 6px; background: var(--badge-bg); color: var(--badge-text); font-size: 12px; line-height: 1.4; font-weight: 600; letter-spacing: .3px; white-space: nowrap; }

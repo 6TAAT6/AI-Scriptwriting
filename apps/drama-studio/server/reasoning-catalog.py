@@ -7,7 +7,7 @@ import sys
 
 def enrich(catalog, home):
     from agent.model_metadata import openai_model_rejects_reasoning
-    from agent.reasoning_effort import EFFORT_LADDER, codex_supported_efforts
+    from agent.reasoning_effort import EFFORT_LADDER, codex_supported_efforts, model_id_encodes_reasoning_effort
     from hermes_cli.config import read_user_config_raw
 
     config = read_user_config_raw(Path(home) / "config.yaml")
@@ -23,11 +23,17 @@ def enrich(catalog, home):
         for model in row.get("models") or []:
             caps = dict(capabilities.get(model) or {})
             metadata = (provider.get("models") or {}).get(model, {}) if isinstance(provider.get("models"), dict) else {}
-            declared = metadata.get("supported_efforts") or caps.get("supported_efforts")
+            declared = metadata.get("supported_efforts", caps.get("supported_efforts"))
             efforts = [level for level in EFFORT_LADDER if level != "ultra" and isinstance(declared, list) and level in declared]
             bare = model.lower().rsplit("/", 1)[-1]
-            if not efforts and mode in {"codex_responses", "responses", "chat_completions"} and re.match(r"^(gpt-[56](?:[.-]|$)|o[134](?:[.-]|$))", bare):
+            if model_id_encodes_reasoning_effort(model) and not efforts and mode == "chat_completions":
+                efforts = ["none", "low", "medium", "high", "xhigh"]
+            elif not efforts and mode in {"codex_responses", "responses", "chat_completions"} and re.match(r"^(gpt-[56](?:[.-]|$)|o[134](?:[.-]|$))", bare):
                 efforts = list(codex_supported_efforts(model))
+            if (not efforts
+                    and not isinstance(declared, list) and mode == "chat_completions" and caps.get("reasoning") is not False):
+                # 兼容接口的原生目录不列档位，不能把缺少元数据误判为禁止调节。
+                efforts = ["low", "medium", "high"]
             if (caps.get("reasoning") is False and not metadata.get("supported_efforts")) or openai_model_rejects_reasoning(model):
                 efforts = []
             if caps.get("can_disable_reasoning") is False:

@@ -14,7 +14,7 @@ export function EmployeeAccessPanel() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [expandedRegions, setExpandedRegions] = useState({ chongqing: true, hangzhou: true })
+  const [expandedRegions, setExpandedRegions] = useState({ chongqing: true, hangzhou: true, unassigned: true })
   useEffect(() => {
     let mounted = true
     void Promise.all([listUsers(), loadEmployeeConversations()]).then(([all]) => { if (mounted) setUsers(all) })

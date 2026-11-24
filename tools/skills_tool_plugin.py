@@ -70,7 +70,7 @@ def _serve_skill_file(
     list_available: bool = False, read_error_prefix: bool = False, mark_read: bool = False) -> str:
     """Serve one linked file from a skill directory as a skill_view JSON result. ``hint``
     decorates traversal/containment errors; ``list_available`` adds the available-files listing
-    on not-found (local); ``read_error_prefix`` wraps non-decode read errors (plugin) instead
+    on not-found; ``read_error_prefix`` wraps non-decode read errors (plugin) instead
     of propagating to the caller's handler."""
     from tools.path_security import has_traversal_component, validate_within_dir
     extra = {"hint": hint} if hint else {}
@@ -140,7 +140,10 @@ def _serve_plugin_skill(
         return _fail(f"Skill '{qualified_name}' is not supported on this platform.",
                      readiness_status=SkillReadinessStatus.UNSUPPORTED.value)
     if file_path:
-        return _serve_skill_file(skill_md.parent, file_path, qualified_name, read_error_prefix=True)
+        # Without the listing a model keeps guessing sibling names (naming.md, checklist.md, ...)
+        # and every miss surfaces as a failed step; local skills already return it.
+        return _serve_skill_file(skill_md.parent, file_path, qualified_name, read_error_prefix=True,
+                                 list_available=True)
     if any(p in content.lower() for p in _INJECTION_PATTERNS):
         logger.warning(
             "Plugin skill '%s:%s' contains patterns that may indicate prompt injection", namespace, bare)

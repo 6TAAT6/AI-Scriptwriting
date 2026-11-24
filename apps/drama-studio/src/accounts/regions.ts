@@ -1,5 +1,5 @@
-interface RegionMember { id: string }
-export interface RegionGroup<T> { id: 'chongqing' | 'hangzhou'; label: string; members: T[] }
+interface RegionMember { id: string; organization?: 'chongqing' | 'hangzhou' | 'unassigned'; organization_policy?: boolean }
+export interface RegionGroup<T> { id: 'chongqing' | 'hangzhou' | 'unassigned'; label: string; members: T[] }
 
 // 使用账号标识保留地区归属，姓名修改不会影响人员分组。
 const chongqingMembers = new Set([
@@ -20,6 +20,12 @@ const chongqingMembers = new Set([
 export function groupByRegion<T>(items: T[], identify: (item: T) => RegionMember): RegionGroup<T>[] {
   const chongqing: RegionGroup<T> = { id: 'chongqing', label: '重庆', members: [] }
   const hangzhou: RegionGroup<T> = { id: 'hangzhou', label: '横店', members: [] }
-  for (const item of items) (chongqingMembers.has(identify(item).id) ? chongqing : hangzhou).members.push(item)
-  return [chongqing, hangzhou]
+  const unassigned: RegionGroup<T> = { id: 'unassigned', label: '系统/测试', members: [] }
+  for (const item of items) {
+    const member = identify(item)
+    const group = member.organization === 'chongqing' ? chongqing : member.organization === 'hangzhou' ? hangzhou
+      : member.organization_policy || member.organization === 'unassigned' ? unassigned : chongqingMembers.has(member.id) ? chongqing : hangzhou
+    group.members.push(item)
+  }
+  return unassigned.members.length ? [chongqing, hangzhou, unassigned] : [chongqing, hangzhou]
 }

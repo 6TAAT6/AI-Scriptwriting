@@ -1,3 +1,4 @@
+import { fixtureModelEndpoints, fixtureModelCatalog } from './model-fixtures.mjs'
 import { fixtureActivationCode } from './account-fixtures.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -17,6 +18,7 @@ async function fixture(t, { sessionGate, transportGate } = {}) {
   const directory = await mkdtemp(path.join(tmpdir(), 'studio-revocation-')), calls = [], answers = [], peers = new Set()
   let connections = 0
   const upstream = createServer(async (req, res) => {
+    if(fixtureModelEndpoints(req,res))return;
     if (sessionGate) { sessionGate.enter(); await sessionGate.waiting }
     res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ id: 'stored' }))
   })
@@ -27,7 +29,7 @@ async function fixture(t, { sessionGate, transportGate } = {}) {
       const frame = JSON.parse(raw)
       if (!frame.method) { answers.push(frame); return }
       calls.push(frame)
-      const result = ['session.create', 'session.resume'].includes(frame.method) ? { session_id: 'live', stored_session_id: 'stored', messages: [], info: {} } : { providers: [] }
+      const result = frame.method==='model.options' ? fixtureModelCatalog(frame.params?.profile) : ['session.create', 'session.resume'].includes(frame.method) ? { session_id: 'live', stored_session_id: 'stored', messages: [], info: {} } : { providers: [] }
       ws.send(JSON.stringify({ jsonrpc: '2.0', id: frame.id, result }))
     })
   })
@@ -87,6 +89,7 @@ test('身份在异步会话校验或连接准备期间失效时，旧账号请�
 test('账号已失效时，不代答上游确认，也不继续处理客户端确认回执', async t => {
   for (const method of ['approval', 'secret']) {
     const f = await fixture(t)
+    await f.rpc('catalog','model.options')
     await f.rpc('create', 'session.create')
     const peer = [...f.peers][0]
     const observed = new Promise(resolve => peer.once('message', () => resolve('answered')))
@@ -96,6 +99,7 @@ test('账号已失效时，不代答上游确认，也不继续处理客户端�
     assert.equal(f.answers.length, 0, '失效账号不能通过自动拒绝或错误回执继续操作后台请求')
   }
   const f = await fixture(t)
+  await f.rpc('catalog-2','model.options')
   await f.rpc('create', 'session.create')
   const peer = [...f.peers][0]
   const received = once(f.ws, 'message')

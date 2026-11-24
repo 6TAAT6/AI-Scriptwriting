@@ -6,7 +6,8 @@ import { Markdown } from './Markdown'
 import { GeneratedImage } from './GeneratedImage'
 import { UserMessageContent } from './UserMessageContent'
 import { splitSuggestions } from '../lib/suggestions'
-import { activityLabel, publicActivitySummary } from '../lib/activity-summary'
+import { transcriptBlocks } from '../lib/transcript-blocks'
+import { activityLine, publicActivitySummary, visibleActivities } from '../lib/activity-summary'
 import { publicText } from '../lib/transcript'
 import './EmployeeConversationViewer.css'
 
@@ -34,9 +35,10 @@ export function EmployeeConversationViewer() {
     {viewer.error && <p className="employee-viewer-error" role="alert">{publicText(viewer.error, '员工对话暂时无法读取。')}</p>}
     {!viewer.loading && !viewer.error && <div className="employee-viewer-transcript">
       {!viewer.entries.length && <p className="employee-viewer-empty">这段对话暂无可显示内容。</p>}
-      {viewer.entries.map(entry => entry.role === 'assistant' ? <article key={entry.id} className="employee-viewer-assistant"><Markdown text={splitSuggestions(entry.text).text} /></article>
+      {/* 与员工界面同一分组：同一轮的返修稿已按集号并回初稿位置，只读视图同样只显示一份正文。 */}
+      {transcriptBlocks(viewer.entries).map(({ entry }) => entry).filter(entry => entry.role !== 'thinking').map(entry => entry.role === 'assistant' ? <article key={entry.id} className="employee-viewer-assistant"><Markdown text={splitSuggestions(entry.text).text} /></article>
         : entry.role === 'user' ? <article key={entry.id} className="employee-viewer-user"><UserMessageContent entry={entry} /></article>
-        : entry.role === 'activity' ? <div key={entry.id}><details className="employee-viewer-activity"><summary>创作步骤（{entry.calls.length} 个工具）</summary>{entry.calls.map(call => <p key={call.id}>{activityLabel(call.name)}：{publicActivitySummary(call.resultSummary, call.state === 'error' ? '操作未完成，请稍后重试。' : '操作已返回')}</p>)}</details>{entry.calls.filter(call => call.image).map(call => <GeneratedImage key={call.id} path={call.image!} />)}</div>
+        : entry.role === 'activity' ? <div key={entry.id}><details className="employee-viewer-activity"><summary>创作步骤（{visibleActivities(entry.calls).length} 步）</summary>{visibleActivities(entry.calls).map(call => { const line = activityLine({ ...call, resultSummary: call.resultSummary && publicActivitySummary(call.resultSummary, call.state === 'error' ? '操作未完成，请稍后重试。' : '操作已返回') }); return <p key={call.id}>{line.lead}{line.object ? ` ${line.object}` : ''}{line.detail ? ` · ${line.detail}` : ''}</p> })}</details>{entry.calls.filter(call => call.image).map(call => <GeneratedImage key={call.id} path={call.image!} />)}</div>
         : entry.text ? <p key={entry.id} className="employee-viewer-notice">{entry.text}</p> : null)}
     </div>}
   </section>

@@ -1,4 +1,4 @@
-.attachment-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; color: var(--subtle); font-size: 12px; line-height: 1.6; vertical-align: middle; }
+.attachment-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; color: var(--subtle); font-size: 13px; line-height: 1.6; vertical-align: middle; }
 .attachment-label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-label.file-spreadsheet { color: #237b57; }
 .attachment-label.file-word { color: #3269b0; }

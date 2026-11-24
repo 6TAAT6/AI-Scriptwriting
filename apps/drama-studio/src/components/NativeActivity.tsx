@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { workspace } from '../store/workspace'
-import { Brain, Check, ChevronRight, CircleAlert, Clock3, GitBranch, LoaderCircle, Pause, RefreshCw, Sparkles, Square, WifiOff } from 'lucide-react'
+import { Check, ChevronRight, CircleAlert, Clock3, GitBranch, LoaderCircle, Pause, RefreshCw, Sparkles, Square, WifiOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { Conversation, Entry } from '../lib/transcript'
 import { modelDisplayName } from '../lib/model-options'
@@ -31,10 +31,12 @@ function useElapsed(active: boolean, startedAt?: number, elapsed?: number): numb
   return elapsed
 }
 
+// 只在模型正在思考时显示一行“思考中”和三个轻点；思考结束的标记不留在对话里（与刷新后的历史视图一致）。
 export function ThinkingMarker({ entry, entering }: EntryProps) {
+  if (!entry.pending) return null
   return <div className={`native-thinking ${entering ? 'is-entering' : ''}`} role="status">
-    {entry.pending ? <LoaderCircle size={12} className="spin" aria-hidden="true" /> : <Brain size={12} aria-hidden="true" />}
-    <span>{entry.pending ? '思考中' : '已思考'}</span>
+    <span className="thinking-dots" aria-hidden="true"><span className="thinking-dot" /><span className="thinking-dot" /><span className="thinking-dot" /></span>
+    <span>思考中</span>
   </div>
 }
 

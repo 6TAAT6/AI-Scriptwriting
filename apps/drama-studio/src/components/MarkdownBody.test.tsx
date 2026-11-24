@@ -81,3 +81,30 @@ it('已注册的图片句柄直接读取并显示真实图片', async () => {
   render(<MarkdownBody streaming={false} text={`![欧洲女性人像](${image})`} />)
   expect((await screen.findByRole('img', { name: '欧洲女性人像' })).getAttribute('src')).toBe('blob:scene')
 })
+
+it('正文增量更新时保留已有文件按钮节点，避免流式 Markdown 重建整段正文', async () => {
+  workspace.session.set({ storedId: 'saved-stream', runtimeId: 'live-stream', info: {} })
+  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}))
+  const { rerender } = render(<MarkdownBody streaming text={`[下载稿件](${handle})`} />)
+  const first = await screen.findByRole('button', { name: '下载稿件' })
+  rerender(<MarkdownBody streaming text={`[下载稿件](${handle})\n\n新增的一行正文`} />)
+  const second = await screen.findByRole('button', { name: '下载稿件' })
+  expect(second).toBe(first)
+})
+
+it('加粗紧贴中文标点时照样生效：标点移到加粗外，相邻两段加粗不误连，代码块原样', async () => {
+  const text = [
+    '**承接与取舍：**保留古装的身份压迫。',
+    '文字**「标题」**正文，**观众知道她正在退出。**他却仍以为她会留下。',
+    '**甲**中间文字。**乙：**后文',
+    '```',
+    '**代码：**不改',
+    '```',
+  ].join('\n\n')
+  const { container } = render(<MarkdownBody text={text} streaming={false} />)
+  const bold = '[data-streamdown="strong"]'
+  await waitFor(() => expect(container.querySelectorAll(bold).length).toBeGreaterThan(0))
+  expect([...container.querySelectorAll(`p ${bold}`)].map(node => node.textContent)).toEqual(['承接与取舍', '标题', '观众知道她正在退出', '甲', '乙'])
+  expect([...container.querySelectorAll('p')].map(node => node.textContent).join('')).not.toContain('**')
+  expect(container.querySelector('pre, code')?.textContent).toContain('**代码：**不改')
+})

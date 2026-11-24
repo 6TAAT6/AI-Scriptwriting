@@ -1,7 +1,9 @@
 name: jubao-drama
 version: 0.1.0
-description: 三个可直接替换且同时单选的剧本 Agent，以及可叠加的去 AI 味和大纲变剧本技能，支持人工确认、分批创作和独立审核。
+description: 按需选择完整创作 Agent，叠加大纲扩写、去 AI 味和剧本评估；内部模块按任务加载，支持分批创作、稿件交付和表格读取。
 author: "田易昂"
+python_dependencies:
+  - "xlrd>=2.0.2,<3"
 provides_tools:
   - drama_project_create
   - drama_project_status
@@ -11,6 +13,9 @@ provides_tools:
   - drama_review
   - drama_export
   - drama_rules_read
+  - drama_agent_document
+  - drama_story_bible
+  - drama_requirements
 provides_hooks:
   - pre_llm_call
   - pre_tool_call

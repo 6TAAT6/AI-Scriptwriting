@@ -2,6 +2,15 @@
 from __future__ import annotations
 
 
+class StudioSessionRouteUnavailable(RuntimeError):
+    """历史可继续阅读，但执行前必须明确选择当前账号内的路由。"""
+
+    def __init__(self, model: str, provider: str) -> None:
+        super().__init__("历史记录已恢复；原模型已不可用或接入无法唯一确认，请重新选择当前账号可用的模型后继续。")
+        self.model = model
+        self.provider = provider
+
+
 def _serves_model(entry: dict, model: str) -> bool:
     models = entry.get("models") if isinstance(entry, dict) else None
     if isinstance(models, dict):
@@ -19,7 +28,7 @@ def reconcile_studio_session_route(row: dict, model: str, route: dict, config: d
     if not isinstance(security, dict) or security.get("restricted") is not True or not isinstance(providers, dict):
         return route
     provider = str(route.get("provider") or "").strip().removeprefix("custom:")
-    if not model or provider not in providers or _serves_model(providers[provider], model):
+    if not model or (provider in providers and _serves_model(providers[provider], model)):
         return route
     billing = str(row.get("billing_provider") or "").strip().removeprefix("custom:")
     if billing in providers and _serves_model(providers[billing], model):
@@ -27,7 +36,7 @@ def reconcile_studio_session_route(row: dict, model: str, route: dict, config: d
     else:
         candidates = [name for name, entry in providers.items() if _serves_model(entry, model)]
         if len(candidates) != 1:
-            raise RuntimeError("历史会话的模型接入无法唯一确认，请重新选择当前账号可用的模型。")
+            raise StudioSessionRouteUnavailable(model, str(route.get("provider") or ""))
         selected = candidates[0]
     # 历史地址和协议属于旧接入；由当前账号目录重新解析，避免带回上次启动的 scope。
     return {**route, "provider": "custom:" + selected, "base_url": None, "api_mode": None}

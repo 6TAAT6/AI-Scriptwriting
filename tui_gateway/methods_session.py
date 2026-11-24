@@ -674,6 +674,10 @@ class _Resume:
             self.target, cols=self.cols, cwd=cwd, history=history, lease=None, source=source,
             close_on_disconnect=_flag(self.params, "close_on_disconnect"),
             profile_home=self.profile_home, explicit_cwd=bool(self.profile_resume_cwd), **extra)
+        if selection_error := getattr(self, "model_selection_error", ""):
+            # 复用已完成失败构建的自救路径：阅读可用，明确切换后才允许初始化与续写。
+            record.update(model_selection_error=selection_error, agent_error=selection_error)
+            record["agent_ready"].set()
         if follows_profile:
             record.update(
                 follow_profile_config=True,
@@ -692,9 +696,22 @@ class _Resume:
         raw, display = self.read_history()
         return canonicalize_replay_history(raw), display, raw
 
+    def runtime_overrides(self) -> dict:
+        from tui_gateway.session_model_restore import StudioSessionRouteUnavailable
+        self.model_selection_error = ""
+        try:
+            return _stored_session_runtime_overrides(self.found)
+        except StudioSessionRouteUnavailable as exc:
+            self.model_selection_error = str(exc)
+            # 这里只保留历史身份供展示；新选择自行解析当前账号的地址、协议与思考配置。
+            return {"model_override": {"model": exc.model, "provider": exc.provider},
+                    "provider_override": exc.provider}
+
     def info(self, cwd: str, overrides: dict) -> dict:
-        return _lazy_resume_info(cwd, model=(overrides.get("model_override") or {}).get("model") or "",
-                                 provider=overrides.get("provider_override") or "", profile=self.profile)
+        info = _lazy_resume_info(cwd, model=(overrides.get("model_override") or {}).get("model") or "",
+                                provider=overrides.get("provider_override") or "", profile=self.profile)
+        error = getattr(self, "model_selection_error", "")
+        return {**info, "model_selection_required": bool(error), "model_selection_error": error}
 
     def child_history(self, repair: bool) -> list:
         """The child's OWN conversation (no ancestors), row ids included."""
@@ -947,7 +964,7 @@ def _resume_deferred(ctx: _Resume) -> dict:
     """Bounded ack; the transcript hydrates in the background (the ONE history read) and pages over REST."""
     sid, source, cwd = ctx.mint()
     with _profile_build_scope(ctx.profile_home):
-        overrides = _stored_session_runtime_overrides(ctx.found)
+        overrides = ctx.runtime_overrides()
     record = ctx.record(source, cwd, [], overrides,
                         todo_state=_todo_state_from_db(ctx.db, ctx.target))
     record.update(resume_history_ready=threading.Event(), resume_hydrating=True,
@@ -964,7 +981,7 @@ def _resume_deferred(ctx: _Resume) -> dict:
                             message_count=record["resume_message_count"], status="resuming", hydrating=True)
 
 
-def _resume_cold(ctx: _Resume) -> dict:
+def _resume_cold(ctx: _Resume, overrides: dict | None = None) -> dict:
     """Default cold resume: transcript now, agent OFF the response path (_make_agent can block for seconds;
     callers await this RPC before painting) — pre-warmed on a timer, _sess() builds on demand if the first
     prompt beats it. Unlike lazy, restores full ancestor history + persisted runtime identity."""
@@ -974,20 +991,29 @@ def _resume_cold(ctx: _Resume) -> dict:
     except Exception as e:
         return _err(ctx.rid, 5000, resume_failed_message(e))
     with _profile_build_scope(ctx.profile_home):
-        overrides = _stored_session_runtime_overrides(ctx.found)
+        if overrides is None:
+            overrides = ctx.runtime_overrides()
     record = ctx.record(source, cwd, history, overrides, display_history_prefix=ctx.display_prefix(),
                         todo_state=_todo_state_from_history(history))
     if (reused := ctx.claim(sid, record)) is not None:
         return reused
-    _schedule_agent_build(sid)
+    if not ctx.model_selection_error:
+        _schedule_agent_build(sid)
     _schedule_session_cap_enforcement()  # trim detached idle sessions over the cap
     return _resume_response(ctx, sid, record, info=ctx.info(cwd, overrides), display=display_history,
                             count_source=raw_history,
-                            auto_continue=_maybe_schedule_auto_continue(sid, record, ctx.target))
+                            auto_continue=None if ctx.model_selection_error else _maybe_schedule_auto_continue(sid, record, ctx.target))
 
 
 def _resume_eager(ctx: _Resume) -> dict:
     """Synchronous build OUTSIDE _session_resume_lock (it would stall session.close), then double-checked."""
+    try:
+        with _profile_build_scope(ctx.profile_home):
+            stored_runtime_overrides = ctx.runtime_overrides()
+    except Exception as exc:
+        return _err(ctx.rid, 5000, resume_failed_message(exc))
+    if ctx.model_selection_error:
+        return _resume_cold(ctx, stored_runtime_overrides)
     sid, source, _cwd = ctx.mint()
     with _profile_build_scope(ctx.profile_home):
         try:
@@ -995,7 +1021,6 @@ def _resume_eager(ctx: _Resume) -> dict:
             display_history_prefix = ctx.display_prefix()
             # Profile db so turns persist to the right state.db; stored runtime identity so switching chats does
             # not inherit another chat's global model.
-            stored_runtime_overrides = _stored_session_runtime_overrides(ctx.found)
             agent = _make_agent_in_context(
                 sid, ctx.target, session_db=ctx.db, platform_override=source,
                 cwd_override=ctx.profile_resume_cwd or None,

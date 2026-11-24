@@ -5,6 +5,7 @@ import json
 import re
 
 from .document_evidence import text_statistics
+from .document_parameters import ReadParameterError
 
 
 _EPISODE = re.compile(r"第\s*(\d{1,4})(?:\s*[—–\-~至到]\s*(\d{1,4}))?\s*集")
@@ -23,7 +24,13 @@ def content_metadata(content, name):
 
 
 def document_metadata(document):
-    return {key: value for key, value in document.items() if key != "content"} | content_metadata(document["content"], document["name"])
+    from .requirement_delivery import quality_summary
+    metadata={key:value for key,value in document.items() if key!='content'}
+    if 'quality_check' in metadata:
+        metadata['quality_check']=quality_summary(metadata['quality_check'])
+        metadata.update({key:metadata['quality_check'][key] for key in ('previous_document_id','previous_content_sha256')
+                         if key in metadata['quality_check']})
+    return metadata | content_metadata(document["content"], document["name"])
 
 
 def project_summary(session_id, agent_id, documents, exports):
@@ -35,7 +42,8 @@ def project_summary(session_id, agent_id, documents, exports):
 def _directory_entry(item):
     # 目录只承担找稿与分页，正文和下载回执由 read/export 与完整资料接口提供。
     row = {key: value for key, value in item.items()
-           if key in {"id", "name", "kind", "characters", "content_sha256", "episode_range", "text_statistics"}}
+           if key in {"id", "name", "kind", "characters", "content_sha256", "episode_range", "text_statistics",
+                      'previous_document_id','previous_content_sha256'}}
     if isinstance(row.get("text_statistics"), dict):
         row["text_statistics"] = {key: value for key, value in row["text_statistics"].items()
                                   if key in {"method", "scope", "total_scope", "source_sha256", "han_characters",
@@ -67,8 +75,8 @@ def directory_page(documents, *, offset, total, snapshot_rowid):
 
 def document_page(document, args):
     start, size = args.get("start_char", 0), args.get("max_chars", 12000)
-    if type(start) is not int or start < 0 or type(size) is not int or not 1000 <= size <= 20000:
-        raise ValueError("起始字符必须为非负整数，单段读取范围为 1,000 至 20,000 个字符")
+    if type(start) is not int or start < 0 or type(size) is not int or not 1000 <= size <= 100000:
+        raise ReadParameterError("起始字符必须为非负整数，单段读取范围为 1,000 至 100,000 个字符")
     content = document["content"]
     metadata = document_metadata(document)
     expected = args.get("content_sha256")
@@ -79,7 +87,11 @@ def document_page(document, args):
     end = min(len(content), start + size)
     scope = {"start_char": start, "end_char": end, "characters": len(content),
              "content_sha256": metadata["content_sha256"], "hash_target": "stored_document_text"}
+    previous={key:metadata[key] for key in ('previous_document_id','previous_content_sha256') if key in metadata}
+    comparison=(f' 比对本次修改请读取previous_document_id={previous["previous_document_id"]}，'
+                f'并携带content_sha256={previous["previous_content_sha256"]}，不要用同集最早稿代替直接前版。') if len(previous)==2 else ''
     return {"document": {**metadata, "content": content[start:end]}, **scope,
+            **previous,
             "source_scope": scope, "has_more": end < len(content),
             "next_start_char": end if end < len(content) else None,
-            "next": "本页正文仅覆盖 start_char 到 end_char；has_more 为 true 时携带 content_sha256 按 next_start_char 继续。必须读完相关正文，不把单页当作全文。"}
+            "next": "本页正文仅覆盖 start_char 到 end_char；has_more 为 true 时携带 content_sha256 按 next_start_char 继续。必须读完相关正文，不把单页当作全文。"+comparison}

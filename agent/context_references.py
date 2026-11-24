@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 import json
 import mimetypes
@@ -132,6 +133,41 @@ class ContextReferenceResult:
     injected_tokens: int = 0
     expanded: bool = False
     blocked: bool = False
+
+    @property
+    def requirement_metadata(self) -> dict:
+        """只供原生消息侧车使用；展开正文不携带可被伪造的来源标记。"""
+        if not self.expanded or self.blocked:
+            return {}
+        return {"context_reference_provenance": {
+            "version": 1, "original_text": self.original_message,
+            "expanded_length": len(self.message),
+            "expanded_sha256": hashlib.sha256(self.message.encode('utf-8')).hexdigest(),
+        }}
+
+
+def context_reference_original(content, metadata):
+    """没有来源侧车时返回 None；已标注却校验失败时拒绝从展开文本提取要求。"""
+    provenance = metadata.get("context_reference_provenance") if isinstance(metadata, dict) else None
+    if provenance is None:
+        return None
+    if not isinstance(provenance, dict) or provenance.get("version") != 1:
+        return ""
+    original = provenance.get("original_text")
+    length = provenance.get("expanded_length")
+    digest = provenance.get("expanded_sha256")
+    if not isinstance(original, str) or type(length) is not int or length < 1 or not isinstance(digest, str):
+        return ""
+    parts = [content] if isinstance(content, str) else [part.get("text") for part in content if isinstance(part, dict)] if isinstance(content, list) else []
+    for text in parts:
+        if not isinstance(text, str) or len(text) < length:
+            continue
+        # 界面/网关可前置当前回合提示；原文和附件展开字节本身必须匹配。
+        expanded = text[-length:]
+        if (hashlib.sha256(expanded.encode('utf-8')).hexdigest() == digest
+                and expanded.startswith(original.lstrip())):
+            return original
+    return ""
 
 
 UrlFetcher = Callable[[str], str | Awaitable[str]] | None

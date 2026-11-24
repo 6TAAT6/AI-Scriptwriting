@@ -3,6 +3,7 @@ import { isStableOpen, reconnectBackoffDelayMs } from '../../../shared/src/recon
 import type { RpcMethods, TranscriptMessage } from '../../../shared/src/gateway-contract.generated'
 import { historyProject, historySources, mergeProjectArtifacts, projectFromResult, spilloverPath, type SessionMaterials } from './creative'
 import { refreshCsrfToken, studioRequest } from '../accounts/api'
+import { SelectionObserver, type ObservedSelection } from './selection-observer'
 
 export class StudioGateway extends JsonRpcGatewayClient {
   profile = 'jubao-drama'
@@ -12,6 +13,8 @@ export class StudioGateway extends JsonRpcGatewayClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined
   private reconnectAttempt = 0
   private openedAt: number | null = null
+  private readonly selectionObserver = new SelectionObserver(() => this.connectionState === 'open',
+    params => this.request('studio.observation.selection', params, 5000))
 
   constructor() {
     super({
@@ -23,13 +26,15 @@ export class StudioGateway extends JsonRpcGatewayClient {
       }
     })
     this.onState(state => {
-      if (state === 'open') { this.openedAt = Date.now(); clearTimeout(this.reconnectTimer); this.reconnectTimer = undefined }
+      if (state === 'open') { this.openedAt = null; clearTimeout(this.reconnectTimer); this.reconnectTimer = undefined; this.selectionObserver.flush() }
       if (state === 'closed' || state === 'error') {
         if (isStableOpen(this.openedAt)) this.reconnectAttempt = 0
         this.openedAt = null
         this.scheduleReconnect()
       }
     })
+    // 只有原生就绪后的稳定连接才清零退避，前端握手不代表员工启动成功。
+    this.on('gateway.ready', () => { this.openedAt ??= Date.now() })
   }
 
   private scheduleReconnect() {
@@ -78,8 +83,10 @@ export class StudioGateway extends JsonRpcGatewayClient {
   stop() {
     this.automatic = false; clearTimeout(this.reconnectTimer); this.reconnectTimer = undefined
     this.reconnectAttempt = 0; this.openedAt = null
-    this.startEpoch++; this.starting = null; this.close(); this.profile = ''
+    this.startEpoch++; this.starting = null; this.close(); this.profile = ''; this.selectionObserver.reset()
   }
+
+  observeSelection(value: ObservedSelection) { this.selectionObserver.select(value) }
 
   rpc<K extends keyof RpcMethods>(method: K, params: RpcMethods[K]['params']): Promise<RpcMethods[K]['result']> {
     return this.request(method, params as Record<string, unknown>)

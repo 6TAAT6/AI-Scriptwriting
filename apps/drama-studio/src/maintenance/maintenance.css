@@ -1,0 +1,16 @@
+.maintenance-content { display: contents; }
+.maintenance-layer { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); background: var(--backdrop); overflow-y: auto; }
+.maintenance-dialog { position: relative; inset: auto; margin: 0; width: min(480px, 100%); max-height: calc(100dvh - 32px); padding: 24px; overflow-y: auto; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-popover); }
+.maintenance-dialog:focus { outline: none; }
+.maintenance-kicker { color: var(--purple-ink); font-size: 12px; font-weight: 600; }
+.maintenance-dialog h1 { margin: 8px 0 14px; font-size: 21px; line-height: 1.4; }
+.maintenance-dialog p { margin: 10px 0; line-height: 1.65; white-space: pre-wrap; }
+.maintenance-countdown { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); font-variant-numeric: tabular-nums; }
+.maintenance-dialog .maintenance-draft-note { color: var(--muted); font-size: 12px; }
+.maintenance-dialog .maintenance-warning { color: var(--status-danger); font-size: 13px; }
+.maintenance-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.maintenance-actions p { margin: 0; color: var(--muted); font-size: 13px; }
+.maintenance-announcement, .maintenance-recovery { position: fixed; z-index: 2000; left: 50%; top: max(12px, env(safe-area-inset-top)); translate: -50% 0; display: flex; align-items: center; gap: 12px; width: min(680px, calc(100vw - 32px)); padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-popover); font-size: 13px; }
+.maintenance-announcement > span, .maintenance-recovery > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.maintenance-announcement button, .maintenance-recovery button { flex-shrink: 0; }
+@media (max-width: 420px) { .maintenance-dialog { padding: 20px; } .maintenance-actions > button { flex: 1; } }

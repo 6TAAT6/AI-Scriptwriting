@@ -1,0 +1,86 @@
+{
+  "cache_root_label": "/Volumes/project/imdb_top_200",
+  "card_counts": {
+    "l1": 160,
+    "l2": 2400,
+    "l3": 1600,
+    "total": 4160
+  },
+  "content_quality": {
+    "l1_curated_films": 160,
+    "l2_curated_beat_cards": 2400,
+    "note": "curated=人工撰写、对应真实剧情机制; template=启发式生成、仅通用节拍定义",
+    "template_cards": 1600
+  },
+  "files": {
+    "case_cards": "assets/library/case_cards.jsonl",
+    "manifest": "assets/library/manifest.jsonl",
+    "patterns": "assets/library/patterns.jsonl",
+    "type_stats": "assets/library/type_stats.json"
+  },
+  "full_text": {
+    "count": 160,
+    "directory": "assets/full-text",
+    "note": "Local search layer only; excluded from shareable packages.",
+    "present": true
+  },
+  "generated_at": "2026-06-03T09:52:01.045895+00:00",
+  "scene_detection": {
+    "films_with_under_10_detected_scenes": [
+      {
+        "scene_count": 2,
+        "title": "138_乱_Ran_1985"
+      },
+      {
+        "scene_count": 1,
+        "title": "185_杀人回忆_Memories_of_Murder_2003"
+      }
+    ],
+    "max_detected_scenes": 479,
+    "min_detected_scenes": 1
+  },
+  "skill_name": "movie-development-skill",
+  "source_counts": {
+    "episode_transcripts": 55,
+    "excluded": 62,
+    "indexed_pdf_scripts": 160,
+    "low_text_or_other_excluded": 7,
+    "manifest": 222
+  },
+  "source_manifest": "/Volumes/project/imdb_top_200/_gpts_material_cache/source_manifest.csv",
+  "source_type_counts": {
+    "episode_transcript": 55,
+    "pdf_script": 167
+  },
+  "stc_type_counts": {
+    "伙伴之情": 13,
+    "变迁仪式": 11,
+    "如愿以偿": 7,
+    "愚者成功": 8,
+    "推理侦探": 11,
+    "被制度化": 32,
+    "超级英雄": 28,
+    "金羊毛": 18,
+    "鬼怪屋": 14,
+    "麻烦家伙": 18
+  },
+  "tag_counts": {
+    "亲情/治愈/成长": 17,
+    "制度压力": 55,
+    "动作/冒险": 19,
+    "复仇/道德困境": 9,
+    "悬疑/惊悚": 13,
+    "爱情/亲密关系": 7,
+    "犯罪/黑帮": 15,
+    "科幻/设定": 23,
+    "综合案例": 61,
+    "群戏喜剧": 55,
+    "职场/制度/黑色幽默": 8,
+    "职场喜剧": 55
+  },
+  "target_counts": {
+    "case_cards": 4160,
+    "full_text": 160,
+    "manifest": 222
+  }
+}

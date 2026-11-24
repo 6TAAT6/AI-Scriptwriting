@@ -1,4 +1,8 @@
 .inspector-tabs button { position: relative; transition: color var(--motion-fast) ease, background var(--motion-fast) ease; }
+.inspector-files-empty { gap: 14px; }
+.inspector-empty-illustration { position: relative; width: 68px; height: 68px; display: grid; place-items: center; border-radius: 22px; background: var(--purple-light); color: var(--purple-ink); }
+.inspector-empty-sparkle { position: absolute; top: 8px; right: 8px; background: var(--purple-light); }
+.inspector-files-empty > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .inspector-tabs button[aria-selected='true'] { border-color: transparent; }
 .inspector-tabs button::after { content: ''; position: absolute; bottom: -2px; left: 0; right: 0; height: 2px; background: var(--purple); transform: scaleX(0); transform-origin: center; transition: transform var(--motion-normal) var(--motion-ease); }
 .inspector-tabs button[aria-selected='true']::after { transform: scaleX(1); }
@@ -11,14 +15,14 @@
 }
 .file-row { transition: background var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-ease); }
 .file-icon { transition: border-color var(--motion-fast) ease, box-shadow var(--motion-normal) ease, transform var(--motion-normal) var(--motion-ease); }
-.file-row:hover .file-icon { border-color: color-mix(in srgb, var(--purple) 35%, var(--border)); box-shadow: 0 3px 9px #7655d80e; transform: translateY(-1px); }
+.file-row:hover .file-icon { border-color: color-mix(in srgb, var(--purple) 35%, var(--border)); box-shadow: 0 3px 9px color-mix(in srgb, var(--purple-fill) 10%, transparent); transform: translateY(-1px); }
 .file-row:active { transform: scale(.99); }
-.file-section-title .icon-button[aria-busy='true'] { color: var(--purple); background: var(--purple-light); opacity: 1; }
+.file-section-title .icon-button[aria-busy='true'] { color: var(--purple-ink); background: var(--purple-light); opacity: 1; }
 .document-preview { animation: document-enter var(--motion-normal) var(--motion-ease); }
 .inspector-action-tooltip { position: relative; display: inline-flex; }
-.inspector-action-tooltip::after { content: attr(data-tooltip); position: absolute; z-index: 20; left: 50%; bottom: calc(100% + 6px); max-width: 260px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--text); color: var(--surface); box-shadow: 0 4px 14px #17213a24; font-size: 11px; line-height: 1.35; white-space: nowrap; pointer-events: none; opacity: 0; visibility: hidden; transform: translate(-50%, 2px); }
+.inspector-action-tooltip::after { content: attr(data-tooltip); position: absolute; z-index: 20; left: 50%; bottom: calc(100% + 6px); max-width: 260px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--text); color: var(--surface); box-shadow: 0 4px 14px #17213a24; font-size: 12px; line-height: 1.35; width: max-content; white-space: normal; overflow-wrap: anywhere; pointer-events: none; opacity: 0; visibility: hidden; transform: translate(-50%, 2px); }
 .inspector-action-tooltip:hover::after, .inspector-action-tooltip:focus-within::after { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
-.document-loading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.document-loading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .document-skeleton { display: grid; width: 100%; gap: 13px; margin-top: 18px; }
 .document-skeleton span { display: block; height: 9px; border-radius: 4px; background: linear-gradient(100deg, var(--hover) 25%, var(--surface) 48%, var(--hover) 72%); background-size: 220% 100%; animation: document-loading 1.7s ease-in-out infinite; }
 .document-skeleton span:nth-child(2) { width: 92%; }

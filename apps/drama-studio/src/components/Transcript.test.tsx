@@ -1,8 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { workspace, type WorkspaceApi } from '../store/workspace'
-import { historyEntries, reduceEvent, type Conversation } from '../lib/transcript'
-import { mergeProjectArtifacts, projectFromResult } from '../lib/creative'
+import { historyEntries, reduceEvent, type Conversation, type Entry } from '../lib/transcript'
+import { resultSummary } from '../lib/activity-summary'
+import { projectFromResult } from '../lib/creative'
 import { gateway } from '../lib/gateway'
 import * as downloads from '../lib/download'
 import { Transcript } from './Transcript'
@@ -10,57 +11,6 @@ import { Composer } from './Composer'
 
 beforeEach(() => workspace.reset())
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
-
-test('助手只回复摘要时仍可直接展开已保存全文，晚到资料绑定原回合且不触发生成', async () => {
-  const path = '/assets-data/' + 'f'.repeat(32) + '/第1至10集正文.docx'
-  const content = '第01集\n\n1-1场 餐馆 日 内\n\nEmma：先核对发票。\n\n第10集\n\n10-3场 餐馆 夜 内\n\nLucas：原始收据在蓝色封套里。'
-  workspace.session.set({ runtimeId: 'runtime', storedId: 'stored', info: {} })
-  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: historyEntries([
-    { role: 'user', row_id: 1, content: '写前十集正文' },
-    { role: 'tool', row_id: 2, tool_call_id: 'save', name: 'drama_agent_document', content: JSON.stringify({ ok: true, receipt: { path, name: '第1至10集正文.docx', format: 'docx' } }) },
-    { role: 'assistant', row_id: 3, content: '十集已保存，剧情摘要：主角发现了账本问题。' },
-    { role: 'user', row_id: 4, content: '解释人物动机' },
-    { role: 'assistant', row_id: 5, content: '她希望核对当事人的说法。' }
-  ]) })
-  const rpc = vi.spyOn(workspace.api, 'rpc').mockRejectedValue(new Error('阅读已存正文不允许发生成请求'))
-  render(<Transcript onReadFile={() => {}} />)
-  act(() => workspace.project.set(projectFromResult({ project: { id: 'agent-docs', agent_id: 'gm3-1',
-    artifacts: [{ id: 'script-ten', name: '第1至10集正文', kind: 'script', content }],
-    exports: [{ artifact_id: 'script-ten', path, name: '第1至10集正文.docx', format: 'docx', content_verified: true, layout_verified: false,
-      text_statistics: { method: 'unicode_han_and_non_whitespace_v1', han_characters: 34, non_whitespace_characters: 85 } }]
-  } })))
-  const card = await screen.findByRole('region', { name: '完整剧本正文：第1至10集正文' })
-  expect(card.compareDocumentPosition(screen.getByText('解释人物动机')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  expect(within(card).getByText(/34 汉字/)).toBeTruthy()
-  expect(within(card).getByText(/WPS 未检查/)).toBeTruthy()
-  fireEvent.click(within(card).getByRole('button', { name: '展开完整正文' }))
-  expect(await within(card).findByText('Lucas：原始收据在蓝色封套里。')).toBeTruthy()
-  expect(rpc).not.toHaveBeenCalled()
-})
-
-test('已有下载链接仍提供完整正文入口，单页回执不能替换该入口中的全文', async () => {
-  const path = '/assets-data/' + 'a'.repeat(32) + '/正文.docx'
-  workspace.session.set({ runtimeId: 'runtime', storedId: 'stored', info: {} })
-  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: historyEntries([
-    { role: 'user', content: '重新发正文' },
-    { role: 'tool', tool_call_id: 'export', name: 'drama_agent_document', content: JSON.stringify({ ok: true, receipt: { path, name: '正文.docx', format: 'docx' } }) },
-    { role: 'assistant', content: `[正文.docx](${path})` }
-  ]) })
-  workspace.project.set(projectFromResult({ project: { id: 'docs', agent_id: 'gm3-1', artifacts: [
-    { id: 'full', name: '正文', content: '第01集\n\n△Emma坐下。\n\n第10集\n\n△Lucas合上账本。', kind: 'script' }
-  ], exports: [{ artifact_id: 'full', path, name: '正文.docx', format: 'docx' }] } }))
-  render(<Transcript onReadFile={() => {}} />)
-  const card = await screen.findByRole('region', { name: '完整剧本正文：正文' })
-  fireEvent.click(within(card).getByRole('button', { name: '展开完整正文' }))
-  expect(await within(card).findByText('△Lucas合上账本。')).toBeTruthy()
-  act(() => workspace.project.set(mergeProjectArtifacts(projectFromResult({
-    document: { id: 'full', content: '第01集', has_more: true },
-    project: { id: 'docs', agent_id: 'gm3-1', artifacts: [{ id: 'full', name: '正文', characters: 80 }], exports: [] }
-  }), workspace.project.get())))
-  expect(within(card).getByText('△Lucas合上账本。')).toBeTruthy()
-  expect(screen.getAllByRole('button', { name: '下载 Word：正文.docx' })).toHaveLength(1)
-  expect(within(card).queryByText(/汉字/)).toBeNull()
-})
 
 test('仅发送文档时立即显示独立附件，原始引用和历史恢复保持一致', async () => {
   workspace.connection.set('open')
@@ -146,12 +96,12 @@ test('上翻记录后主动发送会回到底部并跟随回复，再次上翻�
   expect(scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight).toBe(0)
 })
 
-test('普通完成回复没有协议时也渲染带边框的下一步卡片，并可填入当前对话框', () => {
+test('回复中的文字建议渲染为带边框的下一步卡片并可填入对话框，没有建议时不补通用卡片', () => {
   workspace.connection.set('open')
   workspace.session.set({ runtimeId: 'runtime', storedId: 'stored', info: {} })
   workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: [
     { id: 'user', role: 'user', text: '帮我修改作文，沿用当前对话已经确认的要求。', calls: [] },
-    { id: 'assistant', role: 'assistant', text: '作文已经完成。接下来请补充你想修改的重点。', calls: [] }
+    { id: 'assistant', role: 'assistant', text: '作文已经完成。\n\n接下来，你可以：\n- **改写成议论文**：请结合当前对话，用同一主题改写成议论文。', calls: [] }
   ] })
 
   render(<><Transcript onInspect={() => {}} /><Composer /></>)
@@ -162,6 +112,13 @@ test('普通完成回复没有协议时也渲染带边框的下一步卡片，�
   const edit = within(firstCard).getByRole('button', { name: /填入编辑/ })
   fireEvent.click(edit)
   expect((screen.getByRole('textbox', { name: '给巨豹智能体发送消息' }) as HTMLTextAreaElement).value).toContain('请结合当前对话')
+  cleanup()
+  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: [
+    { id: 'user2', role: 'user', text: '帮我修改作文。', calls: [] },
+    { id: 'assistant2', role: 'assistant', text: '作文已经完成。', calls: [] }
+  ] })
+  render(<Transcript onInspect={() => {}} />)
+  expect(screen.queryByRole('region', { name: '接下来，你可以' })).toBeNull()
 })
 
 test('展开创作步骤保留业务摘要，工具耗时、技术参数和原始结果不进入界面', () => {
@@ -173,12 +130,15 @@ test('展开创作步骤保留业务摘要，工具耗时、技术参数和原�
   ]) conversation = reduceEvent(conversation, { ...event, session_id: 'runtime' })
   workspace.conversation.set(conversation)
   render(<Transcript onInspect={() => {}} />)
-  fireEvent.click(screen.getByText('阅读资料、保存文件'))
-  expect(screen.getByText('2 个工具')).toBeTruthy()
+  fireEvent.click(screen.getByText('已阅读资料、保存文件'))
+  expect(screen.getByText('2 步')).toBeTruthy()
   expect(screen.queryByText(/工具累计|用时.*秒|耗时未记录/)).toBeNull()
-  expect(screen.getByText('资料：原稿.md')).toBeTruthy()
+  expect(screen.getByText('已阅读资料')).toBeTruthy()
+  expect(screen.getByText('原稿.md')).toBeTruthy()
   expect(screen.getByText('已读取 120 行')).toBeTruthy()
   expect(screen.getByText('大纲已保存')).toBeTruthy()
+  expect(screen.queryByText('操作内容')).toBeNull()
+  expect(screen.queryByText('执行结果')).toBeNull()
   expect(screen.queryByText('操作参数')).toBeNull()
   expect(screen.queryByText('原始结果')).toBeNull()
   expect(document.body.textContent).not.toContain('/private/runtime')
@@ -295,7 +255,7 @@ test('浏览器剪贴板拒绝时使用兼容复制，不显示复制失败', as
   expect(screen.queryByText('复制失败，请手动选择文本。')).toBeNull()
 })
 
-test('思考和公开状态按消息顺序内联显示，推理原文不进入正文或复制操作', () => {
+test('已结束的思考不留标记，公开状态按消息顺序内联显示，推理原文不进入正文或复制操作', () => {
   workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: [
     { id: 'thinking', role: 'thinking', text: 'PRIVATE_REASONING', calls: [], pending: false },
     { id: 'review', role: 'status', text: '技能已加载，正在核对分集资料。', calls: [], noticeKind: 'status.update' },
@@ -303,10 +263,9 @@ test('思考和公开状态按消息顺序内联显示，推理原文不进入�
     { id: 'reflection', role: 'status', text: '已修补创作回执格式。', calls: [], noticeKind: 'review.summary' }
   ] })
   render(<Transcript onInspect={() => {}} />)
-  const thinking = screen.getByText('已思考')
+  expect(screen.queryByText('已思考')).toBeNull()
   const review = screen.getByText('技能已加载，正在核对分集资料。')
   const answer = screen.getByText('第九集草稿已保存。')
-  expect(thinking.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(review.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(screen.getByText(/自我改进回顾/)).toBeTruthy()
   expect(screen.getAllByRole('button', { name: '复制回复' })).toHaveLength(1)
@@ -338,4 +297,217 @@ test('父轮结束后保留运行中的子代理，失败和完成后退出活�
     expect(screen.queryByRole('article', { name: '子代理：为《小福星》起草第九至十二集完整新纲' })).toBeNull()
     expect(screen.queryByText('后台任务完成后将自动继续')).toBeNull()
   }
+})
+
+test('创作步骤一行一步：显示能力名称，不显示内部技能名、自动注入的空步骤和重复读取', () => {
+  const entries = historyEntries([
+    { role: 'tool', tool_call_id: 'a', name: 'skill_view', args: { name: 'jubao-drama:jubao-agent-gm3-1' }, content: JSON.stringify({ success: true }) },
+    { role: 'tool', tool_call_id: 'b', name: 'skill_view' },
+    { role: 'tool', tool_call_id: 'c', name: 'read_file', args: { path: '/home/x/attachments/S-十年劫（80集）.docx' }, content: JSON.stringify({ content: '1|第1集' }) },
+    { role: 'tool', tool_call_id: 'd', name: 'skill_view', args: { name: 'jubao-drama:jubao-agent-gm3-1' }, content: JSON.stringify({ success: true }) },
+    { role: 'tool', tool_call_id: 'e', name: 'skill_view', args: { name: 'jubao-drama:jubao-agent-gm3-1', file_path: 'references/pattern-library/north-america.md' }, content: JSON.stringify({ success: true }) }
+  ])
+  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries })
+  render(<Transcript onInspect={() => {}} />)
+  expect(screen.getByText('已读取创作规则、阅读资料、读取规则参考')).toBeTruthy()
+  expect(screen.getByText('3 步')).toBeTruthy()
+  expect(screen.getAllByText('已读取创作规则')).toHaveLength(1)
+  expect(screen.getByText('巨豹 Agent1 · 适配满血版 V1.1')).toBeTruthy()
+  expect(screen.getByText('S-十年劫（80集）.docx')).toBeTruthy()
+  expect(screen.getByText('north-america')).toBeTruthy()
+  expect(document.body.textContent).not.toContain('jubao-drama:')
+  expect(document.body.textContent).not.toContain('历史记录未保留操作回执')
+})
+
+test('进行中的步骤在摘要里写明正在做什么，失败步骤写明原因', () => {
+  let conversation: Conversation = { runtimeId: 'runtime', running: true, error: '', entries: [] }
+  for (const event of [
+    { type: 'tool.start', payload: { tool_id: 'r', name: 'drama_material_import', args: { path: '/a/原剧大纲.xlsx' } } },
+    { type: 'tool.complete', payload: { tool_id: 'r', name: 'drama_material_import', result: { ok: false, error: '资料文件不存在' } } },
+    { type: 'tool.start', payload: { tool_id: 's', name: 'drama_agent_document', args: { action: 'save', name: '第01—03集 剧本正文' } } }
+  ]) conversation = reduceEvent(conversation, { ...event, session_id: 'runtime' })
+  workspace.conversation.set(conversation)
+  render(<Transcript onInspect={() => {}} />)
+  expect(screen.getByText('正在保存稿件 第01—03集 剧本正文…')).toBeTruthy()
+  expect(screen.getByText('未能读取原稿')).toBeTruthy()
+  expect(screen.getByText(/资料文件不存在/)).toBeTruthy()
+})
+
+const episode = (n: number, tag: string) => `第0${n}集\n\n${n}-1场  冰峰堡垒  夜  内\n\n` + `△艾拉${tag}${n}看着莫拉。\n\n`.repeat(6)
+const visibleText = () => [...document.querySelectorAll('.assistant-message .markdown')].filter(node => !node.closest('.revision-draft')).map(node => node.textContent).join('')
+
+test('整批返修在原位替换：只显示一份正文，初稿可点开对照', () => {
+  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: [
+    { id: 'u', role: 'user', turnId: 't', text: '写第1-3集剧本正文', calls: [] },
+    { id: 'a1', role: 'assistant', turnId: 't', text: [1, 2, 3].map(n => episode(n, '初稿')).join('\n'), calls: [] },
+    { id: 'check', role: 'activity', text: '', calls: [{ id: 'check-1', name: 'drama_agent_document', label: '核验稿件', state: 'complete', revisionEvidence: { documentId: 'doc-123', qualityStatus: 'fail', previousDocumentId: 'doc-old', sourceMessageId: 'a1' } }] },
+    { id: 'a2', role: 'assistant', turnId: 't', text: [1, 2, 3].map(n => episode(n, '修订')).join('\n'), calls: [] }
+  ] })
+  render(<Transcript onInspect={() => {}} />)
+  const note = screen.getByText('本次已修改上方正文')
+  expect(visibleText()).toContain('艾拉修订2看着莫拉')
+  expect(visibleText()).not.toContain('艾拉初稿')
+  expect(document.querySelectorAll('.assistant-message')).toHaveLength(1)
+  // 修订说明在正文之后。
+  const body = [...document.querySelectorAll('.assistant-message p')].find(node => node.textContent?.includes('艾拉修订3'))!
+  expect(body.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '查看修订前的初稿' }))
+  const draft = document.querySelector('.revision-draft')!
+  expect(draft.querySelector('header')?.textContent).toContain('修改前版本，仅供对照')
+  expect(draft.textContent).toContain('艾拉初稿2看着莫拉')
+})
+
+test('只返修第2集：放回第2集原位，顺序不变，开场白不显示，说明在正文之后', () => {
+  let conversation: Conversation = { runtimeId: 'runtime', running: false, error: '', entries: [
+    { id: 'u', role: 'user', turnId: 't', text: '写第1-3集剧本正文', calls: [] },
+    { id: 'a1', role: 'assistant', turnId: 't', text: [1, 2, 3].map(n => episode(n, '初稿')).join('\n'), calls: [] }
+  ] }
+  conversation = reduceEvent(conversation, { session_id: 'runtime', type: 'tool.complete', payload: { tool_id: 'save', name: 'drama_agent_document', args: { action: 'save', name: '第01—03集' }, result: { ok: true, document: { id: 'doc-45', source_message_id: 'a1' }, quality_check: { status: 'fail', revisions_remaining: 1, issues: [{ code: 'above_maximum', episode: 2, difference: 10 }] } } } })
+  conversation = { ...conversation, entries: [...conversation.entries,
+    { id: 'a2', role: 'assistant', turnId: 't', text: '根据核验结果，修订第2集如下：\n\n' + episode(2, '修订') + '\n本轮返修：第2集补足篇幅。', calls: [] }] }
+  workspace.conversation.set(conversation)
+  render(<Transcript onInspect={() => {}} />)
+  const text = visibleText()
+  const order = ['艾拉初稿1', '艾拉修订2', '艾拉初稿3', '本轮返修'].map(mark => text.indexOf(mark))
+  expect(order.every(position => position >= 0)).toBe(true)
+  expect([...order].sort((a, b) => a - b)).toEqual(order)
+  expect(text).not.toContain('艾拉初稿2')
+  expect(text).not.toContain('根据核验结果，修订第2集如下')
+  expect(document.querySelectorAll('.assistant-message')).toHaveLength(1)
+})
+
+test('同一轮接着写新的集数不是返修，照常另起显示', () => {
+  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: [
+    { id: 'u', role: 'user', turnId: 't', text: '写第1-6集剧本正文', calls: [] },
+    { id: 'a1', role: 'assistant', turnId: 't', text: [1, 2, 3].map(n => episode(n, '第一批')).join('\n'), calls: [] },
+    { id: 'a2', role: 'assistant', turnId: 't', text: [4, 5, 6].map(n => episode(n, '第二批')).join('\n'), calls: [] }
+  ] })
+  render(<Transcript onInspect={() => {}} />)
+  expect(screen.queryByText('已按核验结果修订')).toBeNull()
+  const text = visibleText()
+  expect(text.indexOf('艾拉第一批3')).toBeLessThan(text.indexOf('艾拉第二批4'))
+})
+
+test('同集普通回复没有核验身份回执时不覆盖初稿', () => {
+  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: [
+    { id: 'u', role: 'user', turnId: 't', text: '写第2集剧本正文', calls: [] },
+    { id: 'a1', role: 'assistant', turnId: 't', text: episode(2, '初稿').repeat(4), calls: [] },
+    { id: 'unrelated', role: 'activity', text: '', calls: [{ id: 'check-other', name: 'drama_agent_document', label: '核验稿件', state: 'complete', revisionEvidence: { documentId: 'other', qualityStatus: 'fail', sourceMessageId: 'unrelated-message' } }] },
+    { id: 'a2', role: 'assistant', turnId: 't', text: episode(2, '普通回复').repeat(4), calls: [] }
+  ] })
+  render(<Transcript onInspect={() => {}} />)
+  const text = [...document.querySelectorAll('.assistant-message .markdown')].map(node => node.textContent).join('')
+  expect(text).toContain('艾拉初稿2')
+  expect(text).toContain('艾拉普通回复2')
+  expect(document.querySelectorAll('.assistant-message')).toHaveLength(2)
+  expect(document.querySelector('.revision-note')).toBeNull()
+})
+
+test('跨消息按稿件 lineage 归并版本，同名的独立稿件仍各有卡片', () => {
+  const oldPath = '/assets-data/' + 'a'.repeat(32) + '/第2集正文-v1.docx'
+  const newPath = '/assets-data/' + 'b'.repeat(32) + '/第2集正文-v2.docx'
+  const oldArtifact = { id: 'doc-old', name: '第2集正文', content: episode(2, '初稿'), kind: 'result' as const,
+    documentKind: 'script', contentSha256: 'a'.repeat(64), sourceMessageId: 'm1', downloadPath: oldPath, downloadName: '第2集正文-v1.docx', downloadFormat: 'docx' }
+  const newArtifact = { id: 'doc-new', name: '第2集正文', content: episode(2, '修订'), kind: 'result' as const,
+    documentKind: 'script', sourceMessageId: 'm2', previousDocumentId: 'doc-old', previousContentSha256: 'a'.repeat(64), downloadPath: newPath, downloadName: '第2集正文-v2.docx', downloadFormat: 'docx' }
+  workspace.session.set({ runtimeId: 'runtime', storedId: 'stored', info: {} })
+  const alternative = { ...oldArtifact, id: 'alternative', sourceMessageId: 'm3', content: '独立方案正文', downloadPath: '/assets-data/' + 'c'.repeat(32) + '/独立方案.docx', downloadName: '独立方案.docx' }
+  workspace.project.set({ id: 'p', title: 'p', stage: 'M3', artifacts: [oldArtifact, newArtifact, alternative], agentId: 'gm3-1' })
+  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: [
+    { id: 'u', role: 'user', turnId: 't', text: '写第2集并按核验结果修订', calls: [] },
+    { id: 'm1', role: 'assistant', turnId: 't', text: episode(2, '初稿'), calls: [] },
+    { id: 'm2', role: 'assistant', turnId: 't', text: episode(2, '修订'), calls: [] },
+    { id: 'm3', role: 'assistant', turnId: 't', text: '独立方案正文', calls: [] }
+  ] })
+  render(<Transcript onInspect={() => {}} />)
+  expect(screen.getAllByRole('region', { name: /完整剧本正文：/ })).toHaveLength(2)
+  expect(screen.getByText('第2集正文-v2.docx')).toBeTruthy()
+  expect(screen.getByText('独立方案.docx')).toBeTruthy()
+  expect(screen.queryByText('第2集正文-v1.docx')).toBeNull()
+  expect(visibleText()).not.toContain('艾拉初稿2')
+  expect(visibleText()).toContain('艾拉修订2')
+})
+
+test('实时与历史原位合并修订稿，操作记录不把待修问题显示为修改结论', () => {
+  const failed = { ok: true, document: { name: '第04—05集 剧本正文' }, quality_check: { status: 'fail', revisions_remaining: 1,
+    issues: [{ code: 'above_maximum', episode: 5, difference: 313 }, { code: 'market_mismatch' }] } }
+  const entries = [
+    { id: 'u', role: 'user', turnId: 'u', text: '写第4—5集', calls: [] },
+    { id: 'r1', role: 'activity', text: '', calls: [{ id: 'c1', name: 'skill_view', label: '读取创作规则', verb: '读取创作规则', object: '巨豹 Agent1 · 适配满血版 V1.1', state: 'complete' }] },
+    { id: 't1', role: 'thinking', text: '', calls: [] },
+    { id: 'r2', role: 'activity', text: '', calls: [{ id: 'c2', name: 'drama_material_import', label: '读取原稿', verb: '读取原稿', object: '十年劫.docx', state: 'complete' }] },
+    { id: 'a1', role: 'assistant', turnId: 'x1', text: [4, 5].map(n => episode(n, '初稿')).join('\n'), calls: [] },
+    { id: 'r3', role: 'activity', text: '', calls: [{ id: 'c3', name: 'drama_agent_document', label: '管理剧本稿件', verb: '保存稿件', object: '第04—05集 剧本正文', state: 'complete', resultSummary: resultSummary(failed), revisionEvidence: { documentId: 'doc-45', qualityStatus: 'fail', previousDocumentId: 'doc-old', sourceMessageId: 'a1' } }] },
+    { id: 't2', role: 'thinking', text: '', calls: [] },
+    { id: 'a2', role: 'assistant', turnId: 'x2', text: '发现第5集超长，修订如下：\n\n' + episode(5, '修订'), calls: [] },
+    { id: 't3', role: 'thinking', text: '', calls: [], pending: true }
+  ] as Entry[]
+  workspace.conversation.set({ runtimeId: 'runtime', running: true, error: '', entries })
+  render(<Transcript onInspect={() => {}} />)
+  expect(screen.queryByText('已思考')).toBeNull()
+  const groups = document.querySelectorAll('.activity-group')
+  expect(groups).toHaveLength(2)
+  const message = document.querySelector('.assistant-message')!
+  expect(groups[0].compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(message.compareDocumentPosition(groups[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(document.querySelector('[data-document-check]')).toBeNull()
+  expect(visibleText()).not.toMatch(/通过|核验|313字|正在修订/)
+  expect(screen.getByText('正在整理本次稿件…')).toBeTruthy()
+  const text = visibleText()
+  expect(text.indexOf('艾拉初稿4')).toBeLessThan(text.indexOf('艾拉修订5'))
+  expect(text).not.toContain('艾拉初稿5')
+})
+
+test('返修完成后只保留中性修改记录，不把质量状态显示为结论', () => {
+  const failed = { ok: true, quality_check: { status: 'fail', revisions_remaining: 1, issues: [{ code: 'above_maximum', episode: 5, difference: 313 }] } }
+  const passed = { ok: true, quality_check: { status: 'pass' } }
+  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: [
+    { id: 'u', role: 'user', turnId: 'u', text: '写第4—5集', calls: [] },
+    { id: 'a1', role: 'assistant', turnId: 'x1', text: [4, 5].map(n => episode(n, '初稿')).join('\n'), calls: [] },
+    { id: 'r1', role: 'activity', text: '', calls: [{ id: 'c1', name: 'drama_agent_document', label: '管理剧本稿件', verb: '保存稿件', object: '第04—05集 剧本正文', state: 'complete', resultSummary: resultSummary(failed), revisionEvidence: { documentId: 'doc-45', qualityStatus: 'fail', previousDocumentId: 'doc-old', sourceMessageId: 'a1' } }] },
+    { id: 'a2', role: 'assistant', turnId: 'x2', text: episode(5, '修订'), calls: [] },
+    { id: 'r2', role: 'activity', text: '', calls: [{ id: 'c2', name: 'drama_agent_document', label: '管理剧本稿件', verb: '保存稿件', object: '第04—05集 剧本正文', state: 'complete', resultSummary: resultSummary(passed), revisionEvidence: { documentId: 'doc-45', qualityStatus: 'pass' } }] }
+  ] as Entry[] })
+  render(<Transcript onInspect={() => {}} />)
+  const groups = document.querySelectorAll('.activity-group')
+  expect(groups).toHaveLength(1)
+  expect(document.querySelector('[data-document-check]')).toBeNull()
+  expect(visibleText()).not.toMatch(/通过|核验|313字/)
+  expect(screen.getByText('本次已修改上方正文')).toBeTruthy()
+  expect(document.querySelector('.assistant-message')!.compareDocumentPosition(groups[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+test('旧历史里的多次核验只作为保存记录，不重复显示自查状态', () => {
+  const failed = (difference: number) => ({ ok: true, quality_check: { status: 'fail', revisions_remaining: 1, issues: [{ code: 'above_maximum', episode: 5, difference }] } })
+  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: [
+    { id: 'u', role: 'user', turnId: 'u', text: '写第4—5集', calls: [] },
+    { id: 'a1', role: 'assistant', turnId: 'x1', text: [4, 5].map(n => episode(n, '初稿')).join('\n'), calls: [] },
+    { id: 'r1', role: 'activity', text: '', calls: [{ id: 'c1', name: 'drama_agent_document', label: '管理剧本稿件', verb: '保存稿件', object: '第04—05集 剧本正文', state: 'complete', resultSummary: resultSummary(failed(313)), revisionEvidence: { documentId: 'doc-45', qualityStatus: 'fail', previousDocumentId: 'doc-old', sourceMessageId: 'a1' } }] },
+    { id: 'n1', role: 'assistant', turnId: 'x2', text: '第5集超出上限，下面删减。', calls: [] },
+    { id: 'r2', role: 'activity', text: '', calls: [{ id: 'c2', name: 'drama_agent_document', label: '管理剧本稿件', verb: '保存稿件', object: '第04—05集 剧本正文', state: 'complete', resultSummary: resultSummary(failed(80)), revisionEvidence: { documentId: 'doc-45', qualityStatus: 'fail', previousDocumentId: 'doc-old', sourceMessageId: 'a1' } }] }
+  ] as Entry[] })
+  render(<Transcript onInspect={() => {}} />)
+  const titles = [...document.querySelectorAll('.activity-group .activity-title')].map(node => node.textContent)
+  expect(titles.every(text => !/通过|核验|修订|达到/.test(text || ''))).toBe(true)
+  expect(visibleText()).toContain('第5集超出上限，下面删减。')
+})
+
+
+test('历史宿主核验尾注隐藏但角色台词和真实修改说明保留，质量回执不提前声称已改', () => {
+  const body = '第1集\n\n1-1场 接待室 日 内\n\n人物：艾拉\n\n艾拉：申请未通过。\n\n本次修改：保留证据链，补充了开门动作。'
+  const notice = '\n\n> 【系统核验】这份稿件还有以下地方没达到要求，可按以下问题继续调整：\n>\n> - 第1集正文超过要求。'
+  const result = { ok: true, quality_check: { status: 'fail', revisions_remaining: 1, issues: [{ code: 'above_maximum', episode: 1, difference: 313 }] } }
+  workspace.conversation.set({ runtimeId: 'runtime', running: false, error: '', entries: historyEntries([
+    { role: 'user', content: '请保留“未通过”这句台词。' },
+    { role: 'assistant', content: body + notice },
+    { role: 'tool', name: 'drama_agent_document', args: { action: 'save', name: '第1集' }, content: JSON.stringify(result) }
+  ]) })
+  render(<Transcript />)
+  const text = visibleText()
+  expect(text).toContain('艾拉：申请未通过。')
+  expect(text).toContain('本次修改：保留证据链，补充了开门动作。')
+  expect(text).not.toContain('【系统核验】')
+  expect(text).not.toContain('313')
+  expect(text).not.toContain('正在修订')
+  expect(text).not.toContain('已修改上方正文')
 })

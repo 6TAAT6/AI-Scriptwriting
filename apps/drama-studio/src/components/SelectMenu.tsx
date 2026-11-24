@@ -108,7 +108,7 @@ export function SelectMenu({ label, value, options, onChange, placeholder = '请
       aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? `${id}-list` : undefined}
       disabled={disabled} title={title} onClick={() => open ? close() : show()}
       onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); if (!open) show() } }}>
-      {leading}<span key={value} className="select-menu-value">{selected?.label || placeholder}</span>{selected?.badge && <small className="select-menu-badge" aria-hidden="true">{selected.badge}</small>}<ChevronDown size={13} />
+      {leading}<span key={value} className="select-menu-value">{selected?.label || placeholder}</span>{selected?.badge && <small className="select-menu-badge" aria-hidden="true">{selected.badge}</small>}<ChevronDown className="select-menu-chevron" size={13} />
     </button>
     {createPortal(<div ref={panel} hidden={!open} inert={!open} aria-hidden={!open} className={`select-menu-panel ${searchLabel ? 'is-searchable' : ''}`} style={position} onKeyDown={onKeyDown}>
       <div className="select-menu-heading"><strong>{label}</strong><span>{filtered.length} 项</span></div>
@@ -118,7 +118,7 @@ export function SelectMenu({ label, value, options, onChange, placeholder = '请
       <div id={`${id}-list`} role="listbox" aria-label={label} tabIndex={-1} className="select-menu-list"
         aria-activedescendant={activeIndex >= 0 ? `${id}-option-${activeIndex}` : undefined}>
         {filtered.map((option, index) => <div key={option.value}>
-          {option.group && option.group !== filtered[index - 1]?.group && <div className="select-menu-group">{option.group}</div>}
+          {option.group && option.group !== filtered[index - 1]?.group && <div className={`select-menu-group ${option.group === '生图模型' ? 'is-image' : 'is-text'}`}>{option.group}</div>}
           <div id={`${id}-option-${index}`} role="option" aria-selected={option.value === value}
             aria-disabled={option.disabled || undefined}
             className={`select-menu-option ${index === activeIndex ? 'is-active' : ''}`} onPointerMove={() => setActive(index)} onMouseDown={event => event.preventDefault()} onClick={() => choose(option)}>

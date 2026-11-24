@@ -2,21 +2,21 @@
 .document-toc { position: sticky; top: -1px; z-index: 3; margin: 0 -8px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 3px 12px #21173e07; }
 .document-toc-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px; text-align: left; color: var(--subtle); }
 .document-toc-toggle > svg { flex-shrink: 0; }
-.document-toc-toggle > strong { font-size: 12px; font-weight: 550; flex-shrink: 0; }
-.document-toc-toggle > span { min-width: 0; margin-left: auto; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-toc-toggle > strong { font-size: 13px; font-weight: 500; flex-shrink: 0; }
+.document-toc-toggle > span { min-width: 0; margin-left: auto; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .document-toc-toggle[aria-expanded='true'] { color: var(--purple); }
 .document-toc-toggle[aria-expanded='true'] > svg:last-child { transform: rotate(180deg); }
 .document-toc-menu { position: absolute; left: -1px; right: -1px; top: calc(100% + 5px); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px; box-shadow: 0 12px 30px #21173e20; }
 .document-toc-search { display: flex; align-items: center; gap: 7px; padding: 9px; border: 1px solid var(--border); border-radius: 7px; color: var(--muted); margin-bottom: 8px; }
-.document-toc-search input { min-width: 0; width: 100%; font-size: 12px; }
+.document-toc-search input { min-width: 0; width: 100%; font-size: 13px; }
 .document-toc-search:focus-within { border-color: var(--purple); }
 .document-toc-menu nav { max-height: min(40dvh, 320px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-.document-toc-item { display: block; width: 100%; padding: 9px 12px; border-radius: 6px; color: var(--subtle); font-size: 12px; line-height: 1.5; text-align: left; overflow-wrap: anywhere; }
-.document-toc-item:hover, .document-toc-item[aria-current] { background: var(--purple-light); color: var(--purple); }
-.document-toc-empty { font-size: 12px; color: var(--muted); text-align: center; padding: 15px 6px; }
-.document-reader-body .markdown { font-size: 13px; line-height: 2; }
+.document-toc-item { display: block; width: 100%; padding: 9px 12px; border-radius: 6px; color: var(--subtle); font-size: 13px; line-height: 1.5; text-align: left; overflow-wrap: anywhere; }
+.document-toc-item:hover, .document-toc-item[aria-current] { background: var(--purple-light); color: var(--purple-ink); }
+.document-toc-empty { font-size: 13px; color: var(--muted); text-align: center; padding: 15px 6px; }
+.document-reader-body .markdown { font-size: 14px; line-height: 1.8; }
 .document-reader-body .markdown :is(p, li) { white-space: pre-wrap; }
-.document-reader-body .markdown p { margin-bottom: 18px; }
+.document-reader-body .markdown p { margin-bottom: 4px; }
 .document-reader-body .markdown :is(h1, h2, h3, h4, h5, h6) { scroll-margin-top: 70px; }
 .document-reader-body .markdown :is(h1, h2) { margin: 32px 0 18px; padding-top: 16px; border-top: 1px solid var(--border); }
 .document-reader-body .markdown h3 { margin: 24px 0 12px; color: var(--purple); }

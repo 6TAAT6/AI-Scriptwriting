@@ -1,0 +1,337 @@
+/* 曜夜：深色玻璃面板 + 品牌蓝青光晕；创作进行中输入框边缘有一圈光带。
+   默认暗色（底色 #16181e 一档，不用纯黑，开灯的办公室里看着不刺眼），明亮主题同样适配。
+   只改外观，不改信息结构；每组文字色在对应底色上 ≥ 4.5:1。 */
+
+@property --yy-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+
+/* 品牌暗色版标识与登录页图标：默认隐藏，只在曜夜暗色下替换。 */
+.studio-brand-mark-dark, .login-icon .login-icon-dark { display: none; }
+
+/* —— 颜色变量 —— */
+:root[data-skin='yaoye'] {
+  --surface: #ffffff; --sidebar: #f4f5f8; --panel: #f8f9fb; --hover: #eceef4;
+  --text: #1e222b; --muted: #5b6270; --subtle: #4a5060; --border: #e2e5ec;
+  --purple: #4f5bd5; --purple-light: #e9ebfc; --purple-ink: #3e4bb8; --purple-fill: #5563e0; --teal: #13836f;
+  --amber: #8a5300; --amber-light: #fdf2dd;
+  --new-chat-border: #d5daf7; --request-border: #d3d8f3; --quote-border: #b9c1f0; --composer-focus: #9aa4ee;
+  --shadow: 0 10px 30px #1e233c12;
+  --shadow-popover: 0 18px 48px #1e233c24, 0 2px 8px #1e233c0f;
+  --backdrop: #1e233c40;
+  --yy-a1: #8c9bff; --yy-a2: #3cc9b0; --yy-on-accent: #12151b;
+  --yy-bg: #f2f3f6; --yy-bg2: #fafafc;
+  --yy-glass: rgba(255, 255, 255, .72); --yy-glass-b: rgba(20, 24, 40, .08); --yy-pop: rgba(255, 255, 255, .95);
+  --yy-card: rgba(255, 255, 255, .78); --yy-comp: #ffffff;
+  --yy-panel-sh: 0 10px 30px rgba(30, 35, 60, .06);
+  --yy-comp-sh: 0 18px 44px rgba(30, 35, 60, .10);
+  --yy-card-sh: 0 14px 32px rgba(30, 35, 60, .10);
+  --yy-bubble: rgba(110, 125, 240, .09); --yy-bubble-b: rgba(110, 125, 240, .20);
+  --yy-cbord: linear-gradient(135deg, rgba(110, 125, 240, .40), rgba(20, 24, 40, .08) 45%, rgba(46, 180, 155, .34));
+  --yy-cfocus: linear-gradient(135deg, rgba(110, 125, 240, .75), rgba(110, 125, 240, .35) 50%, rgba(46, 180, 155, .65));
+  --yy-focus-ring: rgba(110, 125, 240, .12);
+  --yy-ring-rest: rgba(110, 125, 240, .18); --yy-glow: .45;
+  --yy-new-a: rgba(110, 125, 240, .12); --yy-new-b: rgba(46, 180, 155, .08);
+  --yy-orb-b: rgba(120, 140, 255, .18); --yy-orb-t: rgba(46, 196, 169, .14); --yy-orb-v: rgba(190, 160, 255, .12);
+  --yy-dot: #13836f;
+  color: var(--text); background: var(--yy-bg);
+}
+:root[data-skin='yaoye'][data-theme='dark'] {
+  --surface: #1f222a; --sidebar: #17191f; --panel: #1b1e25; --hover: #272b34;
+  --text: #dfe3ea; --muted: #9ba3b2; --subtle: #b3b9c6; --border: #2c3039;
+  --purple: #a9b4ff; --purple-light: #272c46; --purple-ink: #c4cbff; --purple-fill: #5563e0; --teal: #3cc9b0;
+  --amber: #f0b45e; --amber-light: #2f2618;
+  --new-chat-border: #3a4166; --request-border: #3a4166; --quote-border: #4e5794; --composer-focus: #5c67c9;
+  --shadow: 0 10px 30px #00000040;
+  --shadow-popover: 0 22px 56px #00000080, 0 0 0 1px #ffffff0d;
+  --backdrop: #0a0b0fb3;
+  --yy-bg: #16181e; --yy-bg2: #1c1f27;
+  --yy-glass: rgba(31, 34, 42, .66); --yy-glass-b: rgba(255, 255, 255, .075); --yy-pop: rgba(31, 34, 42, .96);
+  --yy-card: rgba(255, 255, 255, .035); --yy-comp: #1f222a;
+  --yy-panel-sh: 0 0 0 rgba(0, 0, 0, 0);
+  --yy-comp-sh: 0 20px 50px rgba(0, 0, 0, .30);
+  --yy-card-sh: 0 14px 36px rgba(0, 0, 0, .28);
+  --yy-bubble: rgba(140, 155, 255, .12); --yy-bubble-b: rgba(140, 155, 255, .22);
+  --yy-cbord: linear-gradient(135deg, rgba(140, 155, 255, .30), rgba(255, 255, 255, .06) 45%, rgba(60, 201, 176, .22));
+  --yy-cfocus: linear-gradient(135deg, rgba(140, 155, 255, .60), rgba(140, 155, 255, .25) 50%, rgba(60, 201, 176, .50));
+  --yy-focus-ring: rgba(140, 155, 255, .08);
+  --yy-ring-rest: rgba(140, 155, 255, .16); --yy-glow: .7;
+  --yy-new-a: rgba(140, 155, 255, .18); --yy-new-b: rgba(60, 201, 176, .10);
+  --yy-orb-b: rgba(110, 130, 255, .20); --yy-orb-t: rgba(46, 196, 169, .13); --yy-orb-v: rgba(170, 140, 255, .09);
+  --yy-dot: #3cc9b0;
+  background: var(--yy-bg); color: var(--text);
+}
+
+/* —— 整体背景：缓慢漂移的蓝、青两团柔光 —— */
+:root[data-skin='yaoye'] .studio-app { position: relative; isolation: isolate; background: linear-gradient(180deg, var(--yy-bg2) 0%, var(--yy-bg) 100%); }
+:root[data-skin='yaoye'] :is(.studio-app, .studio-login)::before,
+:root[data-skin='yaoye'] :is(.studio-app, .studio-login)::after { content: ''; position: absolute; z-index: -1; border-radius: 50%; pointer-events: none; }
+:root[data-skin='yaoye'] :is(.studio-app, .studio-login)::before { left: -240px; top: -320px; width: 860px; height: 860px; background: radial-gradient(circle, var(--yy-orb-b) 0%, transparent 62%); animation: yy-drift-a 28s ease-in-out infinite alternate; }
+:root[data-skin='yaoye'] :is(.studio-app, .studio-login)::after { right: -280px; bottom: -360px; width: 900px; height: 900px; background: radial-gradient(circle, var(--yy-orb-t) 0%, transparent 62%), radial-gradient(circle at 10% 10%, var(--yy-orb-v) 0%, transparent 40%); animation: yy-drift-b 34s ease-in-out infinite alternate; }
+@keyframes yy-drift-a { to { transform: translate(140px, 90px) scale(1.12); } }
+@keyframes yy-drift-b { to { transform: translate(-160px, -70px) scale(1.08); } }
+:root[data-skin='yaoye'] .employee-viewer { background: transparent; }
+
+/* —— 侧栏与创作资料：玻璃面板，桌面端悬浮成圆角卡片 —— */
+:root[data-skin='yaoye'] :is(.sidebar, .inspector) { background: var(--yy-glass); border-color: var(--yy-glass-b); -webkit-backdrop-filter: blur(24px) saturate(125%); backdrop-filter: blur(24px) saturate(125%); }
+@media (min-width: 761px) {
+  :root[data-skin='yaoye'] .sidebar-panel:not([aria-hidden='true']) { padding: 10px 0 10px 10px; }
+  :root[data-skin='yaoye'] .sidebar-panel > .sidebar { width: 100%; border: 1px solid var(--yy-glass-b); border-radius: 16px; box-shadow: var(--yy-panel-sh); }
+  :root[data-skin='yaoye'] .inspector-panel:not([aria-hidden='true']) { padding: 10px 10px 10px 0; }
+  :root[data-skin='yaoye'] .inspector-panel > .inspector { width: 100%; border: 1px solid var(--yy-glass-b); border-radius: 16px; box-shadow: var(--yy-panel-sh); }
+  :root[data-skin='yaoye'] .sidebar-resize-handle { right: -6px; }
+  :root[data-skin='yaoye'] .inspector-resize-handle { left: -6px; }
+}
+@media (max-width: 760px) {
+  :root[data-skin='yaoye'] .sidebar { background: var(--sidebar); }
+  :root[data-skin='yaoye'] .inspector { background: var(--panel); }
+}
+:root[data-skin='yaoye'] .new-chat { border-color: var(--yy-glass-b); border-radius: 12px; background: linear-gradient(135deg, var(--yy-new-a), var(--yy-new-b)); color: var(--text); }
+:root[data-skin='yaoye'] .new-chat > svg { color: var(--purple-ink); }
+:root[data-skin='yaoye'] :is(.session-row, .project-group, .sidebar-project-row, .sidebar-session-item) { border-radius: 10px; }
+:root[data-skin='yaoye'] .sidebar-unread { background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); }
+:root[data-skin='yaoye'][data-theme='dark'] .sidebar-unread { box-shadow: 0 0 8px rgba(60, 201, 176, .55); }
+:root[data-skin='yaoye'] .workspace-avatar { border-color: transparent; background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); color: var(--yy-on-accent); font-weight: 600; }
+:root[data-skin='yaoye'] .sidebar-account-row { border-top-color: var(--yy-glass-b); }
+:root[data-skin='yaoye'] .studio-brand-copy .studio-brand-version { background: transparent; border: 1px solid var(--border); }
+
+/* —— 图标：暗色下换浅色版，去掉白色底块 —— */
+:root[data-skin='yaoye'][data-theme='dark'] .studio-brand-mark { padding: 0; border-radius: 0; background: none; }
+:root[data-skin='yaoye'][data-theme='dark'] .studio-brand-mark:not(.studio-brand-mark-dark),
+:root[data-skin='yaoye'][data-theme='dark'] .login-icon img:not(.login-icon-dark) { display: none; }
+:root[data-skin='yaoye'][data-theme='dark'] :is(.studio-brand-mark-dark, .login-icon .login-icon-dark) { display: block; }
+
+/* —— 顶栏 —— */
+:root[data-skin='yaoye'] .workspace-header { border-bottom-color: transparent; }
+:root[data-skin='yaoye'] .pane-toggle { padding: 7px 13px; border: 1px solid var(--yy-glass-b); border-radius: 999px; background: var(--yy-glass); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+:root[data-skin='yaoye'] .pane-toggle.selected { border-color: var(--new-chat-border); background: var(--purple-light); color: var(--purple-ink); }
+:root[data-skin='yaoye'] :is(.update-banner, .error-banner) { border-radius: 12px; }
+:root[data-skin='yaoye'] .error-banner { margin: 8px 20px 0; }
+
+/* —— 欢迎页 —— */
+:root[data-skin='yaoye'] .welcome-mark .studio-brand { width: 64px; height: 64px; display: grid; place-items: center; border: 1px solid var(--yy-glass-b); border-radius: 18px; background: var(--yy-glass);
+  box-shadow: 0 18px 50px -14px rgba(110, 130, 255, .55); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+:root[data-skin='yaoye'] .welcome-mark .studio-brand-mark { width: 40px; height: 40px; }
+:root[data-skin='yaoye'] .welcome-mark img { box-shadow: none; }
+:root[data-skin='yaoye'] .welcome h1 { letter-spacing: -.5px; }
+
+/* —— 输入框：静止时细渐变描边，聚焦更亮，创作进行中一圈光带沿边框旋转并向外晕开 —— */
+:root[data-skin='yaoye'] .conversation-dock { position: relative; z-index: 0; padding-top: 14px; }
+:root[data-skin='yaoye'] .composer-box { border: 1px solid transparent; border-radius: 20px; background: var(--yy-comp); box-shadow: var(--yy-comp-sh); }
+:root[data-skin='yaoye'] .composer-box::before { content: ''; position: absolute; inset: -1px; z-index: 1; padding: 1px; border-radius: inherit; background: var(--yy-cbord); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+:root[data-skin='yaoye'] .composer-box:focus-within { border-color: transparent; box-shadow: 0 0 0 4px var(--yy-focus-ring), var(--yy-comp-sh); }
+:root[data-skin='yaoye'] .composer-box:focus-within::before { background: var(--yy-cfocus); }
+:root[data-skin='yaoye'] .composer-box.is-running::before { background: conic-gradient(from var(--yy-angle), var(--yy-ring-rest) 0deg, var(--yy-ring-rest) 230deg, var(--yy-a1) 295deg, var(--yy-a2) 345deg, var(--yy-ring-rest) 360deg); animation: yy-ring 3.2s linear infinite; }
+:root[data-skin='yaoye'] .composer-box.is-running::after { content: ''; position: absolute; inset: -2px; z-index: -1; border-radius: inherit; pointer-events: none; opacity: var(--yy-glow); filter: blur(18px);
+  background: conic-gradient(from var(--yy-angle), transparent 0deg, transparent 230deg, var(--yy-a1) 295deg, var(--yy-a2) 345deg, transparent 360deg); animation: yy-ring 3.2s linear infinite; }
+@keyframes yy-ring { to { --yy-angle: 360deg; } }
+:root[data-skin='yaoye'] .send-button:not(:disabled) { background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); color: var(--yy-on-accent); box-shadow: 0 6px 18px rgba(110, 130, 255, .30); }
+:root[data-skin='yaoye'] .send-button:not(:disabled):hover { filter: brightness(1.06); box-shadow: 0 8px 22px rgba(110, 130, 255, .40); }
+:root[data-skin='yaoye'] .capability-add { border-radius: 8px; }
+:root[data-skin='yaoye'] .attachment-chip { border-radius: 10px; }
+:root[data-skin='yaoye'] .composer-option .select-menu-trigger { border-radius: 10px; }
+
+/* —— 对话区 —— */
+:root[data-skin='yaoye'] .user-message > div { border: 1px solid var(--yy-bubble-b); border-radius: 20px 20px 6px 20px; background: var(--yy-bubble); color: var(--text); }
+:root[data-skin='yaoye'] .employee-viewer-user { border: 1px solid var(--yy-bubble-b); background: var(--yy-bubble); }
+:root[data-skin='yaoye'] .employee-viewer-assistant, :root[data-skin='yaoye'] .employee-viewer-activity { border-color: var(--yy-glass-b); background: var(--yy-card); }
+:root[data-skin='yaoye'] .stream-cursor { background: linear-gradient(180deg, var(--yy-a1), var(--yy-a2)); }
+:root[data-skin='yaoye'] .small-brand { background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); color: var(--yy-on-accent); }
+:root[data-skin='yaoye'] :is(.execution-progress, .next-step-card, .manuscript-delivery, .request-card, .native-subagent) { border-color: var(--yy-glass-b); background: var(--yy-card); }
+:root[data-skin='yaoye'] :is(.execution-progress, .next-step-card, .manuscript-delivery, .request-card) { border-radius: 14px; }
+:root[data-skin='yaoye'] .execution-progress[data-state='complete'] { background: transparent; }
+:root[data-skin='yaoye'] .execution-steps { border-top-color: var(--yy-glass-b); }
+:root[data-skin='yaoye'] .next-step-card { transition: translate var(--motion-normal) var(--motion-ease), box-shadow var(--motion-normal), border-color var(--motion-fast); }
+@media (hover: hover) { :root[data-skin='yaoye'] .next-step-card:hover { translate: 0 -2px; border-color: var(--yy-bubble-b); box-shadow: var(--yy-card-sh); } }
+:root[data-skin='yaoye'] .manuscript-delivery-actions > button { border-color: transparent; border-radius: 999px; background: var(--hover); }
+:root[data-skin='yaoye'] .manuscript-episodes li, :root[data-skin='yaoye'] .manuscript-versions { border-radius: 8px; }
+:root[data-skin='yaoye'] :is(.script-body, .generated-image) { border-color: var(--yy-glass-b); border-radius: 14px; }
+:root[data-skin='yaoye'] .script-body-bar { background: var(--yy-card); }
+:root[data-skin='yaoye'] .revision-draft { border-radius: 12px; }
+:root[data-skin='yaoye'] .request-card input { border-radius: 10px; }
+:root[data-skin='yaoye'] .choice { border-radius: 10px; }
+:root[data-skin='yaoye'] .markdown pre { border-color: var(--yy-glass-b); border-radius: 12px; }
+:root[data-skin='yaoye'] .message-attachments .document-reference { border-radius: 10px; }
+
+/* —— 展开的菜单、目录与预览浮层：统一玻璃浮层 —— */
+:root[data-skin='yaoye'] :is(.select-menu-panel, .agent-slash-menu, .sidebar-context-menu, .skin-menu-panel, .document-toc-menu, .outline-preview) {
+  border-color: var(--yy-glass-b); border-radius: 14px; background: var(--yy-pop); box-shadow: var(--shadow-popover);
+  -webkit-backdrop-filter: blur(22px) saturate(130%); backdrop-filter: blur(22px) saturate(130%);
+}
+:root[data-skin='yaoye'] :is(.sidebar-context-menu button, .skin-menu-panel > button, .select-menu-option, .document-toc-item) { border-radius: 9px; }
+:root[data-skin='yaoye'] .agent-slash-group { border-color: var(--yy-glass-b); border-radius: 11px; }
+:root[data-skin='yaoye'] .select-menu-list { scrollbar-color: color-mix(in srgb, var(--muted) 40%, transparent) transparent; }
+:root[data-skin='yaoye'] .select-menu-option[aria-selected='true'].is-active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--purple) 40%, transparent); }
+:root[data-skin='yaoye'] :is(.select-menu-search, .document-toc-search) { border-radius: 10px; }
+:root[data-skin='yaoye'] .document-toc { border-color: var(--yy-glass-b); border-radius: 12px; background: var(--yy-pop); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+:root[data-skin='yaoye'] :is(.document-link-tooltip, .message-action-tooltip, .inspector-action-tooltip)::after { padding: 5px 9px; border-radius: 8px; }
+
+/* —— 对话框：新建项目、改名、删除确认、系统设置、维护提示 —— */
+:root[data-skin='yaoye'] :is(.sidebar-dialog, .accounts-dialog, .maintenance-dialog) { border-color: var(--yy-glass-b); background: var(--surface); box-shadow: var(--shadow-popover); }
+:root[data-skin='yaoye'] .sidebar-dialog { border-radius: 18px; }
+:root[data-skin='yaoye'] .accounts-dialog { border-radius: 20px; }
+:root[data-skin='yaoye'] .maintenance-dialog { border-radius: 18px; }
+:root[data-skin='yaoye'] :is(.sidebar-dialog, .accounts-dialog)::backdrop { background: var(--backdrop); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+:root[data-skin='yaoye'] .maintenance-layer { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+:root[data-skin='yaoye'] :is(.maintenance-announcement, .maintenance-recovery) { border-color: var(--yy-glass-b); border-radius: 14px; background: var(--yy-pop); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+:root[data-skin='yaoye'] :is(.sidebar-dialog input, .create-project-dialog .create-project-name) { border-radius: 10px; }
+:root[data-skin='yaoye'] .accounts-header, :root[data-skin='yaoye'] .accounts-nav { border-color: var(--yy-glass-b); }
+:root[data-skin='yaoye'] :is(.accounts-nav > button, .accounts-nav-bottom > button) { border-radius: 10px; }
+:root[data-skin='yaoye'] :is(.account-stats > div, .account-table-wrap, .account-profile-card, .models-card, .models-form, .model-names-panel, .archived-chats-list, .account-status-confirm, .activation-delete-confirm, .account-company-pending) { border-color: var(--yy-glass-b); border-radius: 14px; }
+:root[data-skin='yaoye'] :is(.account-search, .account-field > input, .account-password, .account-role-options > label, .models-form select, .models-form textarea) { border-radius: 10px; }
+
+/* —— 按钮：主操作用蓝青渐变配深色字 —— */
+:root[data-skin='yaoye'] .primary-button:not(.is-danger, .account-danger-button):not(:disabled) { background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); color: var(--yy-on-accent); font-weight: 600; }
+:root[data-skin='yaoye'] .primary-button:not(.is-danger, .account-danger-button):disabled { background: var(--hover); color: var(--muted); }
+:root[data-skin='yaoye'] :is(.primary-button, .secondary-button) { border-radius: 10px; }
+@media (hover: hover) { :root[data-skin='yaoye'] .primary-button:not(.is-danger, .account-danger-button):not(:disabled):hover { filter: brightness(1.06); box-shadow: 0 6px 18px rgba(110, 130, 255, .28); } }
+
+/* —— 暗色下的警示色：原来的深红在暗底上看不清 —— */
+:root[data-skin='yaoye'][data-theme='dark'] :is(.sidebar-context-menu button.is-danger, .account-row-actions button.is-danger, .archived-chats-list .archived-chat-delete, .sidebar-action-error) { color: var(--status-danger); }
+:root[data-skin='yaoye'][data-theme='dark'] .account-notice.is-error { color: var(--status-danger); background: color-mix(in srgb, var(--status-danger) 10%, var(--surface)); }
+:root[data-skin='yaoye'][data-theme='dark'] .account-status.pending { color: var(--amber); }
+:root[data-skin='yaoye'] .empty-file-icon { border-radius: 14px; color: var(--muted); }
+
+/* —— 创作资料 —— */
+:root[data-skin='yaoye'] :is(.inspector-header, .inspector-tabs, .inspector-footer, .document-toolbar) { border-color: var(--yy-glass-b); }
+:root[data-skin='yaoye'] .file-row { border-radius: 10px; border-bottom-color: var(--yy-glass-b); }
+:root[data-skin='yaoye'] .file-icon { border-radius: 9px; }
+:root[data-skin='yaoye'] .memory-editor, :root[data-skin='yaoye'] .memory-history, :root[data-skin='yaoye'] .memory-proposed { border-radius: 12px; }
+
+/* —— 拖入文件 —— */
+:root[data-skin='yaoye'] .file-drop-overlay { border-radius: 20px; background: color-mix(in srgb, var(--surface) 88%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+
+/* —— 登录页：同一套背景光晕与玻璃卡片 —— */
+:root[data-skin='yaoye'] .studio-login { overflow: hidden; background: linear-gradient(180deg, var(--yy-bg2) 0%, var(--yy-bg) 100%); }
+:root[data-skin='yaoye'] .studio-login::before, :root[data-skin='yaoye'] .studio-login::after { z-index: 0; }
+:root[data-skin='yaoye'] .studio-login .login-backdrop { --login-dot: var(--yy-dot); }
+:root[data-skin='yaoye'] .login-card { border-color: var(--yy-glass-b); border-radius: 20px; background: var(--yy-glass); box-shadow: var(--yy-comp-sh); }
+:root[data-skin='yaoye'] .login-card .account-field > input, :root[data-skin='yaoye'] .login-card .account-password { border-radius: 10px; }
+:root[data-skin='yaoye'] .login-card .login-submit { border-radius: 10px; background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); color: var(--yy-on-accent); font-weight: 600; }
+:root[data-skin='yaoye'] .login-card .login-submit:not(:disabled):hover { background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); filter: brightness(1.06); }
+:root[data-skin='yaoye'] .login-hint { border-top-color: var(--yy-glass-b); }
+:root[data-skin='yaoye'] .developer-login-link { color: var(--muted); }
+:root[data-skin='yaoye'] .developer-login-link:is(:hover, :focus-visible) { color: var(--purple); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin='yaoye'] :is(.studio-app, .studio-login)::before, :root[data-skin='yaoye'] :is(.studio-app, .studio-login)::after,
+  :root[data-skin='yaoye'] .composer-box.is-running::before, :root[data-skin='yaoye'] .composer-box.is-running::after { animation: none; }
+}
+
+/* ======== 第四轮：按高保真稿（画布 YaoyeHiFi）补足科技感 ======== */
+/* 更深的底色与玻璃（暗色）。 */
+:root[data-skin='yaoye'][data-theme='dark'] {
+  --surface: #171a22; --sidebar: #12141a; --panel: #151820; --hover: #222632; --border: #262a34;
+  --yy-bg: #0d0f14; --yy-bg2: #12151c; --yy-glass: rgba(22, 25, 33, .74); --yy-pop: rgba(23, 26, 34, .96); --yy-comp: #171a22;
+  --yy-card: rgba(255, 255, 255, .03); --yy-hl: inset 0 1px 0 rgba(255, 255, 255, .05);
+  --yy-grid: rgba(255, 255, 255, .028); --yy-kbd-b: rgba(255, 255, 255, .14);
+}
+:root[data-skin='yaoye'] { --yy-hl: inset 0 1px 0 rgba(255, 255, 255, .9); --yy-grid: rgba(20, 24, 40, .035); --yy-kbd-b: rgba(20, 24, 40, .14); --yy-mark-light: url('/jubao-mark.png'); }
+:root[data-skin='yaoye'] :is(.sidebar, .inspector, .execution-progress, .next-step-card, .manuscript-delivery, .request-card) { box-shadow: var(--yy-hl), var(--yy-panel-sh); }
+
+/* 对话区淡网格，四周渐隐。 */
+:root[data-skin='yaoye'] .workspace-main { isolation: isolate; }
+:root[data-skin='yaoye'] .workspace-main::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: linear-gradient(var(--yy-grid) 1px, transparent 1px), linear-gradient(90deg, var(--yy-grid) 1px, transparent 1px); background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 55% 35%, #000 0%, transparent 75%); mask-image: radial-gradient(ellipse 70% 70% at 55% 35%, #000 0%, transparent 75%); }
+
+/* 数字、时间、版本、快捷键统一等宽。 */
+:root[data-skin='yaoye'] :is(.execution-clock, .execution-steps time, .execution-last-event, .session-row > time, .employee-session-row time, .count, .studio-brand-version, .manuscript-delivery-meta, .manuscript-episodes, .episode-count, .scene-no, .manuscript-versions) { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+:root[data-skin='yaoye'] .sidebar kbd { display: inline-flex; align-items: center; padding: 1px 6px; border: 1px solid var(--yy-kbd-b); border-bottom-width: 2px; border-radius: 5px; font-family: var(--font-mono); font-size: 12px; line-height: 1.4; opacity: 1; color: var(--muted); }
+
+/* 图标 D 玻璃底块（暗色）：深色玻璃方块 + 蓝青细描边 + 青绿外光，里面是渐变线框字形。 */
+:root[data-skin='yaoye'][data-theme='dark'] :is(.studio-brand-mark-dark, .login-icon .login-icon-dark) { padding: 4px; border: 1px solid rgba(140, 155, 255, .45); border-radius: 9px; background: rgba(255, 255, 255, .04);
+  box-shadow: 0 0 0 1px rgba(60, 201, 176, .12), 0 8px 22px -10px rgba(60, 201, 176, .55), inset 0 1px 0 rgba(255, 255, 255, .08); }
+:root[data-skin='yaoye'][data-theme='dark'] .login-icon .login-icon-dark { padding: 6px; border-radius: 12px; }
+:root[data-skin='yaoye'][data-theme='dark'] .welcome-mark .studio-brand { border-color: rgba(140, 155, 255, .45); box-shadow: 0 0 0 1px rgba(60, 201, 176, .12), 0 18px 50px -14px rgba(60, 201, 176, .55), inset 0 1px 0 rgba(255, 255, 255, .08); }
+:root[data-skin='yaoye'][data-theme='dark'] .welcome-mark .studio-brand-mark-dark { padding: 0; border: 0; background: none; box-shadow: none; }
+
+/* 执行进度卡：回复者标识与光环、分段进度、步骤日志。 */
+.execution-avatar, .execution-segments { display: none; }
+:root[data-skin='yaoye'] .execution-heading { align-items: center; }
+:root[data-skin='yaoye'] .execution-avatar { position: relative; display: inline-block; width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; background: conic-gradient(from var(--yy-angle), #8c9bff, #3cc9b0, #b9a4ff, #8c9bff); }
+:root[data-skin='yaoye'] .execution-avatar > span { position: absolute; inset: 2px; border-radius: 50%; background: var(--surface) var(--yy-mark-light) center / 64% no-repeat; }
+:root[data-skin='yaoye'][data-theme='dark'] .execution-avatar > span { background-image: var(--yy-mark-dark); background-size: 70%; }
+:root[data-skin='yaoye'] .execution-progress:is([data-state='running'], [data-state='waiting']) .execution-avatar { animation: yy-ring 1.8s linear infinite; }
+:root[data-skin='yaoye'] .execution-progress:not([data-state='running'], [data-state='waiting']) .execution-avatar { background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); }
+:root[data-skin='yaoye'] .execution-status { font-weight: 500; }
+:root[data-skin='yaoye'] .execution-segments { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; margin: 10px 0 2px; }
+:root[data-skin='yaoye'] .execution-segments > span { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--yy-a1), var(--yy-a2)); }
+:root[data-skin='yaoye'][data-theme='dark'] .execution-segments > span { box-shadow: 0 0 8px rgba(60, 201, 176, .3); }
+:root[data-skin='yaoye'] .execution-segments > span[data-state='running'] { background: linear-gradient(90deg, rgba(140, 155, 255, .25), var(--yy-a1), rgba(140, 155, 255, .25)); background-size: 200% 100%; box-shadow: none; animation: yy-flow 1.2s linear infinite; }
+:root[data-skin='yaoye'] .execution-segments > span:is([data-state='error'], [data-state='interrupted']) { background: var(--status-warn); box-shadow: none; }
+:root[data-skin='yaoye'] .execution-segments > span:is([data-state='blocked'], [data-state='unknown']) { background: var(--border); box-shadow: none; }
+@keyframes yy-flow { to { background-position: -200% 0; } }
+:root[data-skin='yaoye'] .execution-steps li { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; align-items: baseline; gap: 10px; padding: 4px 0; }
+:root[data-skin='yaoye'] .execution-steps time { color: var(--muted); font-size: 12px; }
+:root[data-skin='yaoye'] .execution-steps li[data-state='running'] > span { color: var(--text); }
+:root[data-skin='yaoye'] .execution-timing-note { font-size: 12px; }
+
+/* 稿件交付卡：渐变图标块、核对标记、周期扫光、渐变下载按钮。 */
+.manuscript-delivery-icon { display: none; }
+:root[data-skin='yaoye'] .manuscript-delivery { position: relative; overflow: hidden; }
+:root[data-skin='yaoye'] .manuscript-delivery:not(.is-superseded)::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 45%; pointer-events: none; transform: translateX(-120%);
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .07), rgba(255, 255, 255, 0)); animation: yy-sheen 6s cubic-bezier(.4, 0, .2, 1) infinite; }
+@keyframes yy-sheen { 0%, 60% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+:root[data-skin='yaoye'] .manuscript-delivery-heading { align-items: center; }
+:root[data-skin='yaoye'] .manuscript-delivery-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 11px; background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); color: var(--yy-on-accent); box-shadow: 0 8px 22px -8px rgba(110, 130, 255, .6); }
+:root[data-skin='yaoye'] .manuscript-delivery-verification { display: inline-flex; align-items: center; gap: 4px; width: fit-content; padding: 0 8px; border-radius: 7px; background: color-mix(in srgb, var(--teal) 13%, transparent); color: var(--teal); }
+:root[data-skin='yaoye'] .manuscript-delivery-verification::before { content: '✓'; font-weight: 700; }
+:root[data-skin='yaoye'] .manuscript-delivery-actions .text-button.document-reference { padding: 6px 14px; border-radius: 999px; background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); color: var(--yy-on-accent); font-weight: 600; text-decoration: none; }
+
+/* 下一步建议：推荐标签渐变，悬停浮起并出现箭头。 */
+:root[data-skin='yaoye'] .next-step-label { display: flex; align-items: center; gap: 4px; }
+:root[data-skin='yaoye'] .next-step-label::after { content: '→'; margin-left: auto; color: var(--purple); opacity: 0; transform: translateX(-4px); transition: opacity var(--motion-fast) ease, transform var(--motion-normal) var(--motion-ease); }
+@media (hover: hover) { :root[data-skin='yaoye'] .next-step-card:hover .next-step-label::after { opacity: 1; transform: none; } }
+:root[data-skin='yaoye'] .next-step-recommended { background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); color: var(--yy-on-accent); }
+:root[data-skin='yaoye'] .next-step-actions { border-top: 1px solid var(--yy-glass-b); padding-top: 4px; }
+
+/* 创作资料：类型图标块、渐变标签下划线。 */
+:root[data-skin='yaoye'] .inspector-tabs button::after { background: linear-gradient(90deg, var(--yy-a1), var(--yy-a2)); }
+:root[data-skin='yaoye'] .file-icon { border: 0; border-radius: 10px; background: color-mix(in srgb, var(--purple) 14%, transparent); color: var(--purple-ink); }
+:root[data-skin='yaoye'] .file-icon.source { background: var(--hover); color: var(--muted); }
+
+/* 连接状态点：轻微呼吸光（只在暗色）。 */
+:root[data-skin='yaoye'][data-theme='dark'] .status-dot { box-shadow: 0 0 0 0 rgba(60, 201, 176, .5); animation: yy-live 2.4s ease-out infinite; }
+@keyframes yy-live { 0% { box-shadow: 0 0 0 0 rgba(60, 201, 176, .5); } 100% { box-shadow: 0 0 0 6px rgba(60, 201, 176, 0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin='yaoye'] :is(.execution-avatar, .execution-segments > span, .manuscript-delivery::after, .status-dot) { animation: none; }
+}
+
+/* ======== 第五轮：连接状态、发送涟漪、会话行悬停与细节 ======== */
+.workspace-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.connection-pill { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.connection-pill > span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.connection-pill[data-state='open'] > span { background: var(--teal); }
+.connection-pill[data-state='connecting'] > span { background: var(--purple); animation: pulse 1.2s ease-in-out infinite; }
+.connection-pill:is([data-state='closed'], [data-state='error']) { color: var(--status-warn); }
+.connection-pill:is([data-state='closed'], [data-state='error']) > span { background: var(--status-warn); }
+:root[data-skin='yaoye'] .connection-pill { border-color: var(--yy-glass-b); background: var(--yy-glass); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+:root[data-skin='yaoye'][data-theme='dark'] .connection-pill[data-state='open'] > span { box-shadow: 0 0 0 0 rgba(60, 201, 176, .5); animation: yy-live 2.4s ease-out infinite; }
+@media (max-width: 760px) { .connection-pill { display: none; } }
+
+/* 发送：按下扩散一圈涟漪；发送键与停止键互换时图标弹出。 */
+.send-button { position: relative; }
+.send-ripple { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--purple); pointer-events: none; opacity: 0; animation: send-ripple .75s ease-out; }
+:root[data-skin='yaoye'] .send-ripple { border-color: var(--yy-a2); }
+@keyframes send-ripple { 0% { opacity: .75; transform: scale(1); } 100% { opacity: 0; transform: scale(2.3); } }
+:root[data-skin='yaoye'] .send-button > svg { animation: yy-icon-pop .45s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes yy-icon-pop { from { opacity: 0; transform: scale(.4) rotate(-40deg); } to { opacity: 1; transform: none; } }
+
+/* 会话行：悬停时日期淡出，「⋯」出现在原来日期的位置（触屏保持原样）。 */
+@media (hover: hover) {
+  :root[data-skin='yaoye'] .sidebar-session-item .sidebar-more { position: absolute; right: 4px; top: 50%; margin: 0; translate: 0 -50%; opacity: 0; }
+  :root[data-skin='yaoye'] .sidebar-session-item .session-row > time { transition: opacity var(--motion-fast) ease; }
+  :root[data-skin='yaoye'] .sidebar-session-item:is(:hover, :focus-within) .sidebar-more, :root[data-skin='yaoye'] .sidebar-session-item .sidebar-more[aria-expanded='true'] { opacity: 1; }
+  :root[data-skin='yaoye'] .sidebar-session-item:is(:hover, :focus-within) .session-row > time { opacity: 0; }
+  :root[data-skin='yaoye'] .sidebar-session-item .session-row { padding-right: 12px; }
+}
+
+/* 细节：思考中的点、场次号、对话起始分隔线。 */
+:root[data-skin='yaoye'] :is(.thinking, .native-thinking, .execution-progress) .thinking-dot { background: linear-gradient(135deg, var(--yy-a1), var(--yy-a2)); }
+:root[data-skin='yaoye'] .scene-no { color: var(--purple); }
+:root[data-skin='yaoye'] .origin-line { background: linear-gradient(90deg, var(--border), transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .send-ripple, :root[data-skin='yaoye'] .send-button > svg, .connection-pill > span { animation: none; }
+}

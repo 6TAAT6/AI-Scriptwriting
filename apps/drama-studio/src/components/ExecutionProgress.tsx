@@ -59,12 +59,15 @@ export function ExecutionProgress({ status, startedAt, finishedAt, currentStep, 
   const Icon = status === 'running' ? null : STATUS_ICONS[status]
   return <div className="execution-progress" data-state={status}>
     <div className="execution-heading">
+      {/* 曜夜：回复者标识与光环（创作中转动），纯装饰。 */}
+      <span className="execution-avatar" aria-hidden="true"><span /></span>
       <span className="execution-status" role="status">
         {Icon ? <Icon size={13} aria-hidden="true" /> : <span className="thinking-dots" aria-hidden="true"><span className="thinking-dot" /><span className="thinking-dot" /><span className="thinking-dot" /></span>}
         {STATUS_LABELS[status]}
       </span>
       {hasTiming ? <span className="execution-clock"><Clock3 size={12} aria-hidden="true" /><span role="timer" aria-live="off">{active ? '本轮已用' : '本轮用时'} {elapsedText(end - startedAt)}</span></span> : <span className="execution-clock">{startedAt === undefined ? '本轮起始时间未记录' : '结束时间未记录'}</span>}
     </div>
+    {steps && steps.length > 0 && <div className="execution-segments" aria-hidden="true">{steps.slice(-24).map(step => <span key={step.id} data-state={step.state ?? 'complete'} />)}</div>}
     {currentStep && status === 'running' && <p className="execution-current-step">当前：{currentStep}</p>}
     <p className="execution-timing-note">{status === 'disconnected' ? '经过时间仍会继续，后台执行状态以恢复后的回执为准。' : timingSource === 'local' ? '从本页发起或收到执行事件时计时，包含生成和等待。' : '整轮用时包含生成、工具执行和等待确认。'}</p>
     {steps && steps.length > 0 && <details className="execution-steps" open={expanded}>

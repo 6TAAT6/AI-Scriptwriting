@@ -12,15 +12,19 @@ import { historyProject, historySources, mergeProjectArtifacts, projectFromResul
 import { historyEntries, reduceEvent, restoreToolReceipts, userDisplayText, type Conversation, type StudioEvent } from '../lib/transcript'
 import { beginTurn, restoreTurn } from '../lib/progress'
 import { nativeNotice, restoreSubagents } from '../lib/native-activity'
-import { availableSuggestions } from '../lib/suggestions'
+import { availableSuggestions, selectedSuggestion } from '../lib/suggestions'
 import { buildLanguageAwarePrompt } from '../lib/prompt-language'
 import { capabilitySubmissionError, conversationSelection, selectionAfter, composerCapabilityDraft, capabilityOperations, type CapabilityCommand } from '../lib/capabilities'
 import { modelReasoning, type StudioModelOptions } from '../lib/reasoning'
-import { SessionPreferenceStore, defaultPreferences, type PreferenceScope } from './session-preferences'
+import { SessionActivity } from './session-activity'
+import { SessionPreferenceStore, defaultPreferences, type CreativePreferences, type PreferenceScope } from './session-preferences'
 import { $selectedSidebarProjectId, loadSidebar, patchSidebarSession, selectSidebarProject, sidebarSessionProjectId } from '../lib/sidebar'
 
 export interface SessionSelection { storedId: string; runtimeId: string; info: SessionLiveInfo }
-export interface ComposerState { text: string; region: string; language: string; attachments: FileAttachResult[]; busy: boolean; imageModel?: { model: string; provider: string }; capabilityCommands?: CapabilityCommand[] }
+export interface ComposerState extends CreativePreferences { text: string; attachments: FileAttachResult[]; busy: boolean; capabilityCommands?: CapabilityCommand[] }
+export interface ComposerDraftSnapshot { key: string; storedId: string; projectId: string | null; composer: ComposerState }
+export interface DraftResumeAlias { from: string; to: string }
+export interface WorkspaceDraftSnapshot { selectedKey: string; drafts: ComposerDraftSnapshot[]; aliases: DraftResumeAlias[] }
 export interface NavigationState { sessions: SessionListRow[]; loading: boolean; error: string }
 export const CONNECTION_LOST_ERROR = '创作连接已断开，重新连接后可恢复已有进度。'
 export function clearConnectionErrorOnOpen(state: ConnectionState, navigation: NavigationState): NavigationState {
@@ -31,6 +35,7 @@ export interface WorkspaceApi {
   rpc<K extends keyof RpcMethods>(method: K, params: RpcMethods[K]['params']): Promise<RpcMethods[K]['result']>
   materials(storedId: string): Promise<SessionMaterials>
   sessionReplayBarrier?(runtimeId: string): Promise<boolean> | undefined
+  observeSelection?(selection: { runtimeId: string; storedId: string }): void
 }
 
 export interface WorkspaceProjects {
@@ -41,12 +46,17 @@ export interface WorkspaceProjects {
   attach(sessionId: string, projectId: string | null): Promise<boolean>
 }
 
+const MODEL_REFRESH_ERROR = '模型目录暂未刷新，请稍后新建对话重试。'
+const draftHasContent = (draft: ComposerState) => Boolean(draft.text.trim() || draft.attachments.length || draft.capabilityCommands?.length)
+
 export class Workspace {
   readonly navigation = atom<NavigationState>({ sessions: [], loading: false, error: '' })
   readonly session = atom<SessionSelection>({ storedId: '', runtimeId: '', info: {} })
   readonly conversation = atom<Conversation>({ runtimeId: '', entries: [], running: false, error: '' })
+  readonly activity = new SessionActivity()
   readonly lastSubmissionId = atom('')
   readonly composer = atom<ComposerState>({ text: '', ...defaultPreferences(), attachments: [], busy: false })
+  readonly draftChanges = atom(0)
   private readonly preferences = new SessionPreferenceStore()
   readonly preferenceError = this.preferences.error
   readonly project = atom<ProjectSummary | null>(null)
@@ -68,7 +78,11 @@ export class Workspace {
   private creating: Promise<SessionSelection> | null = null
   private synchronizing: Promise<void> | null = null
   private queuedSync: { models: boolean; restore: boolean; materials: boolean } | null = null
+  /** 合并同一帧内的正文增量，避免整段 Markdown 在每个 token 上重复解析和布局。 */
+  private pendingStreamEvents: StudioEvent[] = []
+  private streamFlushTimer: ReturnType<typeof setTimeout> | null = null
   private readonly drafts = new Map<string, ComposerState>()
+  private readonly draftAliases = new Map<string, string>()
   private readonly pendingProjects = new Map<string, string | null>()
   private readonly pendingSessions = new Map<string, SessionListRow>()
   private draftProjectId: string | null
@@ -76,6 +90,7 @@ export class Workspace {
   constructor(readonly api: WorkspaceApi, readonly projects?: WorkspaceProjects, private readonly accountRole: () => string | null | undefined = () => undefined) {
     this.draftProjectId = projects?.selected() ?? null
     this.restoreDraftPreferences()
+    this.session.subscribe(({ runtimeId, storedId }) => this.api.observeSelection?.({ runtimeId, storedId }))
   }
 
   get accountEpoch() { return this.accountGeneration }
@@ -88,6 +103,8 @@ export class Workspace {
   }
 
   reset() {
+    this.activity.reset()
+    this.cancelStreamEvents()
     this.accountGeneration++
     this.generation++
     this.creationKey = randomId()
@@ -96,6 +113,7 @@ export class Workspace {
     this.queuedSync = null
     this.restorePending = ''
     this.drafts.clear()
+    this.draftAliases.clear()
     this.pendingProjects.clear()
     this.pendingSessions.clear()
     this.draftProjectId = null
@@ -130,11 +148,26 @@ export class Workspace {
     const { draftModel, ...preferences } = this.preferences.read(this.api.profile, ['draft', this.draftProjectId])
     this.composer.set({ ...this.composer.get(), ...preferences })
     this.session.set({ ...this.session.get(), info: draftModel ?? {} })
+    this.editComposer({})
   }
 
   editComposer(patch: Partial<ComposerState>) {
-    this.composer.set({ ...this.composer.get(), ...patch })
-    if (['region', 'language', 'imageModel'].some(key => Object.hasOwn(patch, key))) this.savePreferences()
+    const draft = { ...this.composer.get(), ...patch }
+    if (draft.region === '欧美') draft.region = '北美'
+    const commands = composerCapabilityDraft(draft.text, draft.capabilityCommands).commands
+    const northAmericaSelected = selectionAfter(conversationSelection(this.conversation.get().entries), draft.text, commands).skills.includes('north-america-comic')
+    const changed = draft.northAmericaSelected !== northAmericaSelected && (northAmericaSelected || draft.northAmericaSelected !== undefined)
+    // 只在选中、停用及旧会话首次恢复的边界设置默认，后续手选不会被每次输入覆盖。
+    if (changed) {
+      draft.region = northAmericaSelected ? '北美' : '中国'
+      draft.language = '仅中文'
+    }
+    draft.northAmericaSelected = northAmericaSelected
+    if (['text', 'attachments', 'capabilityCommands'].some(key => Object.hasOwn(patch, key))) {
+      this.rememberDraft(this.session.get().storedId || this.draftKey(), draft)
+    }
+    this.composer.set(draft)
+    if (changed || ['region', 'language', 'imageModel'].some(key => Object.hasOwn(patch, key))) this.savePreferences()
   }
 
   private canUseSuggestion(entryId: string, prompt: string): boolean {
@@ -164,6 +197,7 @@ export class Workspace {
 
   modelSelection(): SessionLiveInfo {
     const selected = this.session.get()
+    if (selected.info.model_selection_required) throw new Error('历史模型当前不可用，请先选择可用的创作模型后继续；历史内容仍可正常查看。')
     return selected.storedId || selected.runtimeId ? selected.info : resolveNewConversationModel(this.models.get(), this.accountRole(), selected.info)
   }
 
@@ -174,7 +208,7 @@ export class Workspace {
     const row = this.models.get().providers.find(row => row.slug === provider)
     if (!row?.models?.includes(model)) return
     const same = selected.info.model === model && (selected.info.provider === provider || row.aliases?.includes(selected.info.provider || ''))
-    if (same) { this.editComposer({ imageModel: undefined }); return }
+    if (same && !selected.info.model_selection_required) { this.editComposer({ imageModel: undefined }); return }
     const info = { ...selected.info, model, provider }
     const { efforts, defaultEffort } = modelReasoning(this.models.get(), info)
     const effort = defaultEffort || efforts.find(value => value === info.reasoning_effort)
@@ -239,22 +273,41 @@ export class Workspace {
   }
 
   async refresh(): Promise<void> {
+    const activity = this.refreshActivity()
     const epoch = this.accountGeneration
     const result = await this.api.rpc('session.list', { profile: this.api.profile, include_hidden: true, limit: 100 })
     if (epoch !== this.accountGeneration) return
     for (const row of result.sessions) this.pendingSessions.delete(row.id)
     const pending = [...this.pendingSessions.values()].reverse().filter(row => !this.pendingProjects.has(row.id))
     this.navigation.set({ ...this.navigation.get(), sessions: [...pending, ...result.sessions], error: '' })
+    await activity
+  }
+
+  private async refreshActivity() {
+    this.activity.scope(this.api.profile)
+    const ticket = this.activity.ticket()
+    try {
+      const result = await this.api.rpc('session.active_list', { profile: this.api.profile })
+      if (Array.isArray(result.sessions)) this.activity.reconcile(result.sessions, ticket)
+    } catch { /* 读取失败保留最近的真实事件，下一次同步再校准。 */ }
   }
 
   async refreshModels(): Promise<void> {
     const epoch = this.accountGeneration
-    try {
-      const result = await this.api.rpc('model.options', { profile: this.api.profile, explicit_only: true, include_unconfigured: false })
-      if (epoch === this.accountGeneration) this.models.set(result as StudioModelOptions)
-    } catch {
-      if (epoch === this.accountGeneration) this.reasoning.set({ ...this.reasoning.get(), error: '模型目录暂未刷新，请稍后新建对话重试。' })
+    // 服务重启等短暂中断时先自动重试一次；成功后清除旧的“目录未刷新”提示，避免提示一直停留在输入框下。
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await this.api.rpc('model.options', { profile: this.api.profile, explicit_only: true, include_unconfigured: false })
+        if (epoch !== this.accountGeneration) return
+        this.models.set(result as StudioModelOptions)
+        if (this.reasoning.get().error === MODEL_REFRESH_ERROR) this.reasoning.set({ ...this.reasoning.get(), error: '' })
+        return
+      } catch {
+        if (epoch !== this.accountGeneration) return
+        if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 3000))
+      }
     }
+    if (epoch === this.accountGeneration) this.reasoning.set({ ...this.reasoning.get(), error: MODEL_REFRESH_ERROR })
   }
 
   async initialize(restorePrevious = true): Promise<void> {
@@ -327,14 +380,61 @@ export class Workspace {
 
   private draftKey(projectId = this.draftProjectId) { return `new:${projectId ?? 'recent'}` }
 
+  private draftFamily(key: string): Set<string> {
+    const family = new Set([key])
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const [from, to] of this.draftAliases) if (family.has(from) || family.has(to)) {
+        if (!family.has(from)) { family.add(from); changed = true }
+        if (!family.has(to)) { family.add(to); changed = true }
+      }
+    }
+    return family
+  }
+
+  private rememberDraft(key: string, draft: ComposerState) {
+    const filled = draftHasContent(draft)
+    for (const other of this.draftFamily(key)) if (other !== key) {
+      const previous = this.drafts.get(other)
+      if (!filled || previous && !draftHasContent(previous)) this.drafts.delete(other)
+    }
+    this.drafts.set(key, { ...draft, busy: false })
+  }
+
+  restoreComposerDraft(draft: ComposerState) {
+    this.rememberDraft(this.session.get().storedId || this.draftKey(), draft)
+    this.composer.set(draft)
+  }
+
   private stashDraft() {
-    this.drafts.set(this.session.get().storedId || this.draftKey(), { ...this.composer.get(), busy: false })
+    const key = this.session.get().storedId || this.draftKey(), draft = this.composer.get()
+    if (this.drafts.has(key) || draftHasContent(draft)) this.rememberDraft(key, draft)
+  }
+
+  maintenanceDraftSnapshot(): WorkspaceDraftSnapshot {
+    const selected = this.session.get(), selectedKey = selected.storedId || this.draftKey()
+    const drafts = new Map(this.drafts), current = this.composer.get()
+    if (drafts.has(selectedKey) || current.text.trim() || current.attachments.length || current.capabilityCommands?.length) drafts.set(selectedKey, { ...current })
+    return { selectedKey, aliases: [...this.draftAliases].map(([from, to]) => ({ from, to })), drafts: [...drafts].map(([key, composer]) => {
+      const project = key.startsWith('new:') ? key.slice(4) : null
+      return { key, storedId: key === selectedKey ? selected.storedId : project === null ? key : '',
+        projectId: key === selectedKey && !selected.storedId ? this.draftProjectId : project === 'recent' ? null : project, composer }
+    }) }
+  }
+
+  private clearDraft(key: string) {
+    // 空记录表示明确清空或删除；reset 的空 Map 只表示尚未恢复，不能抹掉维护副本。
+    this.rememberDraft(key, { text: '', ...defaultPreferences(), attachments: [], capabilityCommands: [], busy: false })
+    this.draftChanges.set(this.draftChanges.get() + 1)
   }
 
   forgetConversation(storedId: string) {
+    this.activity.forget(storedId)
+    this.cancelStreamEvents()
     this.generation++
     this.restoring.set(false)
-    this.drafts.delete(storedId)
+    this.clearDraft(storedId)
     this.preferences.remove(this.api.profile, ['session', storedId])
     this.pendingProjects.delete(storedId)
     this.pendingSessions.delete(storedId)
@@ -358,6 +458,7 @@ export class Workspace {
 
   newConversation(projectId: string | null = this.projects?.selected() ?? null) {
     if (this.composer.get().busy) return
+    this.cancelStreamEvents()
     this.generation++
     this.restorePending = ''
     this.restoring.set(false)
@@ -383,8 +484,12 @@ export class Workspace {
     if (this.composer.get().busy) return
     if (background && this.modelSwitch.get().saving) return
     const keepInput = background && this.session.get().storedId === storedId
+    // 后台重读当前仍在运行的会话时，保留已经到达但尚未过32ms批处理窗口的正文增量。
+    // 切换到其他会话仍需清掉旧会话队列，避免迟到事件污染新视图。
+    if (!keepInput) this.cancelStreamEvents()
     const before = this.conversation.get()
     const generation = ++this.generation
+    const accountEpoch = this.accountGeneration, profile = this.api.profile
     this.stashDraft()
     this.reasoning.set({ saving: false, error: '' })
     this.modelSwitch.set({ saving: false, error: '' })
@@ -405,6 +510,7 @@ export class Workspace {
         result = await resume()
       }
       if (generation !== this.generation) return
+      if (keepInput) this.flushStreamEvents()
       // 恢复快照没有事件水位；同会话的新事件已到达时，保留实时结果并交给下一次同步重读。
       if (result.session_id === before.runtimeId && this.conversation.get() !== before) {
         this.restorePending = storedId
@@ -412,7 +518,19 @@ export class Workspace {
       }
       this.restorePending = ''
       const selected = { runtimeId: result.session_id, storedId: result.stored_session_id || storedId, info: result.info }
+      const migrateDraft = storedId !== selected.storedId && accountEpoch === this.accountGeneration && profile === this.api.profile
+      if (migrateDraft) {
+        const previous = this.draftAliases.get(storedId), key = this.drafts.has(storedId) ? storedId : previous
+        const draft = key ? this.drafts.get(key) : undefined
+        if (draft && !this.drafts.has(selected.storedId)) { this.drafts.set(selected.storedId, draft); this.drafts.delete(key!) }
+        for (const [from, to] of this.draftAliases) if (to === storedId || to === previous) this.draftAliases.set(from, selected.storedId)
+        if (previous && previous !== selected.storedId) this.draftAliases.set(previous, selected.storedId)
+        this.draftAliases.set(storedId, selected.storedId)
+      }
       this.session.set(selected)
+      this.activity.scope(this.api.profile)
+      this.activity.bind(selected.runtimeId, selected.storedId, Boolean(result.running ?? result.info.running))
+      if (document.visibilityState !== 'hidden') { this.activity.markRead(storedId); this.activity.markRead(selected.storedId) }
       if (this.projects) this.projects.select(this.projects.owner(selected.storedId))
       const state: Conversation = { runtimeId: result.session_id, entries: historyEntries(result.messages), running: Boolean(result.running ?? result.info.running), error: '', turn: restoreTurn(result) }
       if (result.inflight?.assistant) state.entries.push({ id: 'inflight', role: 'assistant', text: result.inflight.assistant, calls: [], pending: state.running })
@@ -430,6 +548,8 @@ export class Workspace {
       }
       else this.composer.set({ ...(this.drafts.get(selected.storedId) ?? { text: '', capabilityCommands: [], attachments: [], busy: false }),
         ...this.preferences.read(this.api.profile, ['session', selected.storedId], result.messages) })
+      this.editComposer({})
+      if (migrateDraft) this.draftChanges.set(this.draftChanges.get() + 1)
       localStorage.setItem(this.storageKey(), selected.storedId)
       if (!this.pendingSessions.has(selected.storedId)) void this.loadMaterials(selected)
       void this.loadNativeActivity(selected, generation)
@@ -531,9 +651,11 @@ export class Workspace {
     if (epoch !== this.accountGeneration) throw new Error('账号已切换，请在当前账号中重新开始。')
     const selected = { runtimeId: result.session_id, storedId: result.stored_session_id, info: result.info }
     this.session.set(selected)
+    this.activity.scope(this.api.profile)
+    this.activity.bind(selected.runtimeId, selected.storedId, false)
     if (this.savePreferences()) this.preferences.remove(this.api.profile, ['draft', projectId])
     this.conversation.set({ runtimeId: selected.runtimeId, entries: historyEntries(result.messages), running: false, error: '' })
-    this.drafts.delete(this.draftKey(projectId))
+    this.clearDraft(this.draftKey(projectId))
     // 新会话在首轮落盘前不会出现在历史列表中；使用真实创建回执立即发布侧栏条目。
     this.pendingSessions.set(selected.storedId, { id: selected.storedId, title, source: 'web', started_at: Date.now() / 1000, message_count: result.message_count })
     if (this.projects) this.pendingProjects.set(selected.storedId, projectId)
@@ -550,6 +672,7 @@ export class Workspace {
     const selectionDraft = composerCapabilityDraft(draft.text, draft.capabilityCommands)
     if (this.preparing.get() || this.navigation.get().loading
       || draft.busy || this.reasoning.get().saving || this.modelSwitch.get().saving || this.conversation.get().running
+      || this.session.get().info.model_selection_required
       || this.conversation.get().turn?.state === 'unknown'
       || (!draft.text.trim() && !draft.attachments.length && !selectionDraft.commands.length)) return
     const current = this.conversation.get()
@@ -564,14 +687,21 @@ export class Workspace {
       if (epoch !== this.accountGeneration) return
       const conversation = this.conversation.get()
       const text = selectionDraft.body.trim() + (draft.attachments.length ? '\n\n' + draft.attachments.map(file => file.ref_text).join('\n') : '')
+      const choice = !draft.attachments.length && !selectionDraft.commands.length && !this.requests.get().length
+        ? selectedSuggestion(conversation, text) : null
       const capabilities = selectionAfter(conversationSelection(conversation.entries), draft.text, selectionDraft.commands)
       const entryId = randomId()
       const images = attachedImages(text)
       const attachments = attachedFiles(text)
       this.conversation.set({ ...conversation, running: true, error: '', turn: beginTurn(submittedAt), entries: [...conversation.entries, { id: entryId, role: 'user', text: userDisplayText(text), capabilities, capabilityCommands: selectionDraft.commands, calls: [], ...(images.length ? { images } : {}), ...(attachments.length ? { attachments } : {}) }] })
+      this.activity.bind(session.runtimeId, session.storedId, true)
       this.lastSubmissionId.set(entryId)
       try {
-        const params = { profile: this.api.profile, session_id: session.runtimeId, text: buildLanguageAwarePrompt(text, draft.language, draft.region, capabilities, capabilityOperations(selectionDraft.commands)), surface: 'web' as const,
+        const projectId = this.pendingProjects.has(session.storedId) ? this.pendingProjects.get(session.storedId) ?? null : sidebarSessionProjectId(session.storedId)
+        let prompt = buildLanguageAwarePrompt(text, draft.language, draft.region, capabilities, capabilityOperations(selectionDraft.commands), projectId)
+        if (choice) prompt = prompt.replace('\n\n【用户本轮消息】\n',
+          `\n\n【本轮选项选择】\n用户本轮回复选择了上一条回复中的「${choice.label}」。本轮具体请求：${choice.prompt}\n\n【用户本轮消息】\n`)
+        const params = { profile: this.api.profile, session_id: session.runtimeId, text: prompt, surface: 'web' as const,
           image_model: draft.imageModel?.model || '', image_provider: draft.imageModel?.provider || '' }
         await this.api.rpc('prompt.submit', params)
         if (epoch !== this.accountGeneration) return
@@ -582,9 +712,9 @@ export class Workspace {
         }
         this.sources.set([...this.sources.get(), ...draft.attachments.map(file => ({ id: file.path, name: file.name, path: file.path, kind: 'source' as const }))])
         this.editComposer({ text: '', attachments: [], capabilityCommands: [] })
-        this.drafts.delete(session.storedId)
       } catch (error) {
         if (epoch !== this.accountGeneration) return
+        this.activity.bind(session.runtimeId, session.storedId, false)
         // 提交结果不明时保留输入，让用户恢复会话核实；不自动重发产生重复创作。
         const current = this.conversation.get()
         this.conversation.set({ ...current, running: false, turn: current.turn ? { ...current.turn, state: 'unknown', endedAt: undefined, status: '消息提交状态待核对' } : undefined,
@@ -606,7 +736,7 @@ export class Workspace {
     try {
       // 整批先校验，避免拖入混合文件时只上传了前半批。
       for (const file of files) {
-        if (!isSupportedFile(file.name)) throw new Error('支持 TXT、MD、DOCX、XLSX、CSV、PDF，以及 PNG、JPG、WebP 图片。')
+        if (!isSupportedFile(file.name)) throw new Error('支持 TXT、MD、DOCX、XLSX、XLS、XLSM、CSV、PDF，以及 PNG、JPG、WebP 图片。')
         if (!file.size) throw new Error('文件为空，请重新选择。')
         if (file.size > (isImageFile(file.name) ? IMAGE_MAX_BYTES : DOCUMENT_MAX_BYTES)) throw new Error(isImageFile(file.name) ? '单张图片请控制在 4 MB 以内。' : '单个原稿请控制在 20 MB 以内。')
       }
@@ -641,7 +771,30 @@ export class Workspace {
     catch { if (epoch === this.accountGeneration) this.conversation.set({ ...this.conversation.get(), error: '停止请求未确认，请检查连接。' }) }
   }
 
-  receive(event: StudioEvent) {
+  private cancelStreamEvents() {
+    if (this.streamFlushTimer !== null) {
+      clearTimeout(this.streamFlushTimer)
+      this.streamFlushTimer = null
+    }
+    this.pendingStreamEvents = []
+  }
+
+  private flushStreamEvents() {
+    if (this.streamFlushTimer !== null) {
+      clearTimeout(this.streamFlushTimer)
+      this.streamFlushTimer = null
+    }
+    if (!this.pendingStreamEvents.length) return
+    const events = this.pendingStreamEvents
+    this.pendingStreamEvents = []
+    let next = this.conversation.get()
+    for (const event of events) next = reduceEvent(next, event)
+    if (next !== this.conversation.get()) this.conversation.set(next)
+  }
+
+  private applyEvent(event: StudioEvent) {
+    this.activity.scope(this.api.profile)
+    this.activity.observe(event, this.session.get(), document.visibilityState !== 'hidden', this.conversation.get().asyncPending ?? 0)
     this.conversation.set(reduceEvent(this.conversation.get(), event))
     if (event.type === 'request.cancel') this.requests.set(this.requests.get().filter(request => request.id !== event.payload.id))
     if (['message.complete', 'session.title', 'background.complete', 'subagent.complete'].includes(event.type)) {
@@ -659,6 +812,17 @@ export class Workspace {
       if (pending) this.pendingSessions.set(id, { ...pending, title })
       this.navigation.set({ ...this.navigation.get(), sessions: this.navigation.get().sessions.map(row => row.id === id ? { ...row, title } : row) })
     }
+  }
+
+  receive(event: StudioEvent) {
+    if (event.type === 'message.delta') {
+      this.pendingStreamEvents.push(event)
+      if (this.streamFlushTimer === null) this.streamFlushTimer = setTimeout(() => this.flushStreamEvents(), 32)
+      return
+    }
+    // 完成、工具和错误事件必须先消费所有已排队正文，保持原有事件顺序。
+    this.flushStreamEvents()
+    this.applyEvent(event)
   }
 
   receiveRequest(request: ServerRequest): boolean {

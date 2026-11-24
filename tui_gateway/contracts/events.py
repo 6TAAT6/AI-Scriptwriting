@@ -287,6 +287,11 @@ class ToolCompletePayload(Payload):
     todos: list[JsonValue] | None = None
     revision: int | None = None
     labels: list[ToolLabel] | None = None
+    # 业务工具拒绝携带可恢复原因，保持完成事件与实际发出的回执一致。
+    blocked_reason: str | None = None
+    required_user_action: str | None = None
+    retryable: bool | None = None
+    tool: str | None = None
 
 
 event("tool.complete", ToolCompletePayload, doc="A tool call finished: parsed result, summary, optional diff / todo snapshot.")

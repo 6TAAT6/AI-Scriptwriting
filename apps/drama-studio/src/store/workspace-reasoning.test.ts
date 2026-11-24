@@ -72,3 +72,19 @@ test('模型指定的默认思考用于新建会话，用户仍能选择其他�
   await workspace.ensureSession()
   expect(created).toMatchObject({ reasoning_effort: 'high' })
 })
+
+test('模型目录短暂刷新失败会自动重试，恢复后不再残留“目录未刷新”提示', async () => {
+  let calls = 0
+  const options = { model: 'test-model', provider: 'test-provider', providers: [] }
+  const workspace = reasoningWorkspace((async method => {
+    if (method !== 'model.options') throw new Error('意外请求')
+    calls += 1
+    if (calls === 1) throw new Error('创作服务暂时不可用')
+    return options
+  }) as WorkspaceApi['rpc'])
+  workspace.reasoning.set({ ...workspace.reasoning.get(), error: '模型目录暂未刷新，请稍后新建对话重试。' })
+  await workspace.refreshModels()
+  expect(calls).toBe(2)
+  expect(workspace.reasoning.get().error).toBe('')
+  expect(workspace.models.get()).toEqual(options)
+}, 10000)

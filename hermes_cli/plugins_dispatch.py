@@ -42,6 +42,7 @@ logger = logging.getLogger("hermes_cli.plugins")
 _HOOK_TIMEOUT_BOUNDED_HOOKS: Set[str] = {
     "post_tool_call", "transform_terminal_output", "transform_tool_result", "transform_llm_output",
     "pre_llm_call", "post_llm_call", "pre_api_request", "post_api_request", "api_request_error",
+    "transform_api_messages",
     "pre_auxiliary_call", "post_auxiliary_call", "pre_verify", "on_session_start", "on_session_end",
 }
 
@@ -155,7 +156,7 @@ _MAX_HOOK_CALLBACK_TIMEOUT_SECS = 600.0
 _HOOK_SKIPPED = object()  # returned by _run_hook_callback_bounded on skip/timeout
 
 
-def _hook_call_identity(kwargs: Dict[str, Any]) -> Optional[str]:
+def _hook_call_identity(kwargs: Dict[str, Any]) -> Optional[Union[str, tuple[str, str]]]:
     """Identity of the call this callback fires for, or ``None`` when the event has none.
 
     Concurrent invocations of the same tool in one session must not collapse into one
@@ -163,11 +164,15 @@ def _hook_call_identity(kwargs: Dict[str, Any]) -> Optional[str]:
     hook as if a callback had timed out (upstream #98382). The identity is already in the
     payload; nothing new is plumbed. Deliberately not ``api_request_id`` — one API request
     carries many tool calls, which would re-collapse the keys.
+    会话清理可能没有工具或回合标识；此时按会话去重，元组避免与已有字符串调用标识冲突。
     """
     for field in ("tool_call_id", "turn_id"):
         value = kwargs.get(field)
         if isinstance(value, str) and value:
             return value
+    session_id = kwargs.get("session_id")
+    if isinstance(session_id, str) and session_id:
+        return ("session", session_id)
     return None
 
 
@@ -224,18 +229,20 @@ class PluginDispatchMixin:
         timeout = _resolve_hook_callback_timeout()
         use_timeout = _hook_uses_callback_timeout(hook_name, timeout)
         fail_closed = hook_name in _HOOK_TIMEOUT_FAIL_CLOSED_HOOKS
+        isolate_projection = hook_name == "transform_api_messages"
         for cb in self._hooks.get(hook_name, []):
             try:
+                callback_kwargs = copy.deepcopy(kwargs) if isolate_projection else kwargs
                 if use_timeout:
-                    ret = self._run_hook_callback_bounded(hook_name, cb, kwargs, timeout)
+                    ret = self._run_hook_callback_bounded(hook_name, cb, callback_kwargs, timeout)
                     if ret is _HOOK_SKIPPED:
                         if fail_closed:  # policy hook: fail closed with a block directive
                             results.append({"action": "block", "message": _PRE_TOOL_CALL_TIMEOUT_BLOCK_MESSAGE})
                         continue
                 else:
-                    ret = self._invoke_hook_callback(cb, kwargs)
+                    ret = self._invoke_hook_callback(cb, callback_kwargs)
                 if ret is not None:
-                    results.append(ret)
+                    results.append(copy.deepcopy(ret) if isolate_projection else ret)
             except (Exception, SystemExit) as exc:
                 self._report_hook_failure(hook_name, cb, kwargs, exc)
                 if fail_closed:  # a guard that raised made no decision: same veto as a timeout
@@ -498,14 +505,16 @@ class PluginDispatchMixin:
         timeout = _resolve_hook_callback_timeout()
         use_timeout = _hook_uses_callback_timeout(hook_name, timeout)
         fail_closed = hook_name in _HOOK_TIMEOUT_FAIL_CLOSED_HOOKS
+        isolate_projection = hook_name == "transform_api_messages"
         for cb in self._hooks.get(hook_name, []):
             callback_name = getattr(cb, "__name__", repr(cb))
             try:
-                ret = cb(**self._hook_callback_kwargs(cb, kwargs))
+                callback_kwargs = copy.deepcopy(kwargs) if isolate_projection else kwargs
+                ret = cb(**self._hook_callback_kwargs(cb, callback_kwargs))
                 if inspect.isawaitable(ret):
                     ret = await (asyncio.wait_for(ret, timeout) if use_timeout else ret)
                 if ret is not None:
-                    results.append(ret)
+                    results.append(copy.deepcopy(ret) if isolate_projection else ret)
             except asyncio.TimeoutError:
                 logger.warning("Hook '%s' callback %s timed out after %.0fs", hook_name, callback_name, timeout)
                 if fail_closed:  # policy hook: fail closed with a block directive

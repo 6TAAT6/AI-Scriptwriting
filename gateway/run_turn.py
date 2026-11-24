@@ -1474,8 +1474,20 @@ class GatewayTurnMixin:
             )
             _evt_tz = _get_evt_tz()
             if message_text and isinstance(message_text, str):
+                from agent.context_references import ContextReferenceResult, context_reference_original
+                _origin_metadata = getattr(event, "_context_reference_metadata", {})
+                _original = context_reference_original(message_text, _origin_metadata)
                 _clean_message_text, _embedded_ts = _strip_msg_ts(message_text, tz=_evt_tz)
                 persist_user_message = strip_discord_triggering_note(event, _clean_message_text)
+                if (isinstance(_original, str) and _original
+                        and context_reference_original(persist_user_message, _origin_metadata) != _original):
+                    # 只在旧侧车已校验通过时映射同一次规范化，不重新猜测正文或附件边界。
+                    _clean_original, _ = _strip_msg_ts(_original, tz=_evt_tz)
+                    _clean_original = strip_discord_triggering_note(event, _clean_original)
+                    event._context_reference_metadata = {
+                        **_origin_metadata, **ContextReferenceResult(
+                            message=persist_user_message, original_message=_clean_original,
+                            expanded=True).requirement_metadata}
                 _event_epoch = _coerce_msg_ts(getattr(event, "timestamp", None), tz=_evt_tz)
                 persist_user_timestamp = _event_epoch if _event_epoch is not None else _embedded_ts
                 if _message_timestamps_enabled(_load_gateway_config()):
@@ -1815,6 +1827,9 @@ class GatewayTurnMixin:
             _user_entry["display_kind"] = prepared.persist_user_display_kind
         if prepared.persistence_owner:
             _user_entry["display_metadata"] = {"gateway_input_owner": prepared.persistence_owner}
+        if getattr(event, "_context_reference_metadata", None):
+            _user_entry["display_metadata"] = {
+                **_user_entry.get("display_metadata", {}), **event._context_reference_metadata}
         if getattr(event, "message_id", None):
             _user_entry["message_id"] = str(event.message_id)
         return _user_entry
@@ -2205,6 +2220,7 @@ class GatewayTurnMixin:
                 reply_expected=event.reply_expected,
                 persist_user_display_metadata={
                     "gateway_input_owner": prepared.persistence_owner,
+                    **getattr(event, "_context_reference_metadata", {}),
                     **reply_expected_metadata(event.reply_expected), **diagnostic_metadata(event)},
                 message_type=event.message_type,
                 scheduled_heartbeat=bool(getattr(event, "_heartbeat_session_id", None)),
@@ -3947,6 +3963,7 @@ class GatewayTurnMixin:
                 persist_user_display_kind=next_display_kind,
                 reply_expected=next_reply_expected,
                 persist_user_display_metadata={
+                    **getattr(pending_event, "_context_reference_metadata", {}),
                     **reply_expected_metadata(next_reply_expected), **diagnostic_metadata(pending_event)} or None,
             )
         except asyncio.CancelledError:

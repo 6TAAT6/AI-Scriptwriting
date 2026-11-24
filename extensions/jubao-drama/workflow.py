@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import re
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,17 +86,65 @@ def _source(data):
     return result
 
 
+# 侧栏项目编号是带连字符的 UUID；剧本流程项目编号是 uuid4().hex，两者格式不同。
+_SIDEBAR_PROJECT_ID = re.compile(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
+
+
+class ProjectLookupError(ValueError):
+    """剧本流程项目编号缺失、找不到或属于其他 Agent。
+
+    模型最常见的误用是把【本轮创作设置】里的侧栏 project_id 传给剧本流程工具。只回“没有这个项目”
+    加通用的“先读取当前项目状态”时，模型会拿同一个编号反复重试，界面也看不到真实原因。因此给模型
+    带上本 Agent 实际可用的项目和下一步，给界面一条不含工具名的原因。
+    """
+
+    def __init__(self, message, *, reason, user_message, next_step, projects=()):
+        super().__init__(message)
+        self.reason = reason
+        self.user_message = user_message
+        self.next_step = next_step
+        self.projects = list(projects)
+
+
 class ProjectStore:
     """连接只属于本次事务，目录由当前配置的作用域动态解析。"""
 
     def __init__(self, agent_id="oa6-1"):
         self.agent_id = agent_id
 
-    def _assert_agent(self, project):
-        # 旧 OA6.1 项目没有该字段，按原 Agent 归档；其它 Agent 永远不能读到它。
-        if project.get("agent_id", "oa6-1") != self.agent_id:
-            raise ValueError("当前剧本 Agent 无权访问这个项目")
-        return project
+    def _owned(self, conn, limit=20):
+        # 只取列表字段，不把每个项目的原稿全文读进内存；旧 OA6.1 项目没有 agent_id，按原 Agent 归档。
+        rows = conn.execute(
+            "SELECT id, json_extract(data, '$.title'), json_extract(data, '$.stage') FROM drama_projects "
+            "WHERE coalesce(json_extract(data, '$.agent_id'), 'oa6-1') = ? ORDER BY rowid DESC LIMIT ?",
+            (self.agent_id, limit))
+        return [{"id": row[0], "title": row[1] or "", "stage": row[2] or ""} for row in rows]
+
+    def _lookup_error(self, project_id, conn, *, foreign=False):
+        projects = self._owned(conn)
+        sidebar = not foreign and bool(_SIDEBAR_PROJECT_ID.fullmatch(project_id))
+        if foreign:
+            message = f"剧本流程项目「{project_id}」属于其他剧本 Agent，当前 Agent 不能读取。"
+            user_message = "这个剧本流程项目属于其他 Agent，当前 Agent 不能读取。"
+        elif sidebar:
+            message = (f"「{project_id}」是【本轮创作设置】里的侧栏项目编号，只用于要求清单和设定库，"
+                       "不是剧本流程项目编号。")
+            user_message = "侧栏项目编号不能用来读取剧本流程项目。"
+        else:
+            message = f"没有编号为「{project_id}」的剧本流程项目。"
+            user_message = "没有找到这个剧本流程项目。"
+        if projects:
+            message += "当前 Agent 已有的剧本流程项目见 available_projects。"
+            user_message += "需改用当前 Agent 已建立的项目。"
+            next_step = ("从 available_projects 中选择与本次作品对应的 id 重新调用；都不对应且需要正式阶段流程时，"
+                         "先用 drama_project_create 建立项目。不要用同一编号重试。")
+        else:
+            message += "当前 Agent 还没有剧本流程项目。"
+            user_message += "当前 Agent 还没有建立剧本流程项目。"
+            next_step = ("需要正式阶段流程时先调用 drama_project_create，再使用返回的 project.id；"
+                         "不需要正式阶段流程时不要再调用剧本流程工具，按当前对话继续。不要用同一编号重试。")
+        return ProjectLookupError(message, reason="project_agent_mismatch" if foreign else "project_not_found",
+                                  user_message=user_message, next_step=next_step, projects=projects)
 
     @contextmanager
     def transaction(self):
@@ -122,8 +171,12 @@ class ProjectStore:
                 return self.get(project_id, connection)
         row = conn.execute("SELECT data FROM drama_projects WHERE id = ?", (project_id,)).fetchone()
         if row is None:
-            raise ValueError("当前配置中没有这个剧本项目")
-        return self._assert_agent(json.loads(row[0]))
+            raise self._lookup_error(project_id, conn)
+        project = json.loads(row[0])
+        # 其它 Agent 永远不能读到这个项目；列表只含当前 Agent 自己的项目。
+        if project.get("agent_id", "oa6-1") != self.agent_id:
+            raise self._lookup_error(project_id, conn, foreign=True)
+        return project
 
     def save(self, project, conn):
         if not conn.in_transaction:
@@ -147,7 +200,7 @@ class ProjectStore:
                 return self.create(title, mode, region, language, request, source,
                                    outline_batch_size, script_batch_size, conn=connection)
         language = "chinese" if language == "zh-CN" else language
-        if mode not in MODES or region not in {"中国", "欧美"} or language not in {"bilingual", "chinese"}:
+        if mode not in MODES or region not in {"中国", "北美", "欧美"} or language not in {"bilingual", "chinese"}:
             raise ValueError("请使用有效的剧本模式、地区和台词语言")
         if any(type(size) is not int or size < 1 for size in (outline_batch_size, script_batch_size)):
             raise ValueError("每批集数必须是正整数")
@@ -394,6 +447,8 @@ class ProjectStore:
 
     def _accept_batch(self, project, data, writer):
         batch = self._find_batch(project, data.get("batch_id"))
+        if batch.get('quality_check') and batch['quality_check'].get('status') != 'pass':
+            raise ValueError('当前稿件尚未通过用户要求核验，保留草稿并先修复缺项')
         if batch["id"] == "source":
             raise ValueError("仅审核原稿不能标记为改写稿验收")
         _require_gate(project, batch["kind"])

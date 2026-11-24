@@ -11,6 +11,8 @@ export interface StudioUser {
   created_at: string
   updated_at: string
   last_login_at: string | null
+  organization?: 'hangzhou' | 'chongqing' | 'unassigned'
+  auth_source?: 'local' | 'company'
 }
 export interface StudioEdge {
   store: { listUsers(): StudioUser[]; user(id: string): StudioUser | null }
@@ -29,5 +31,7 @@ export function createStudioEdge(options: {
   repoRoot: string
   hermesHome?: string
   publicOrigin?: string
+  cookieName?: string
+  identity?: { enabled: boolean; company?: { serverUrl: string; callbackUrl: string; appId: string; secret: string } }
   provisionProfile?: (profile: string) => Promise<unknown>
 }): Promise<StudioEdge>

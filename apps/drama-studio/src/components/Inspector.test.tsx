@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import type { SessionMaterials } from '../lib/creative'
 import { workspace } from '../store/workspace'
 import { Inspector } from './Inspector'
+import { ManuscriptDelivery } from './ManuscriptDelivery'
 import { gateway } from '../lib/gateway'
 import * as downloads from '../lib/download'
 import { strToU8, zipSync } from 'fflate'
@@ -32,6 +33,7 @@ test('阶段稿存在 Word 回执时，预览工具栏提供 Word 下载', async
     downloadPath: '/assets-data/abc/第1批正文.docx', downloadName: '第1批正文.docx', downloadFormat: 'docx', downloadStatus: 'draft',
   }} onSelect={() => {}} onClose={() => {}} />)
 
+  expect(document.querySelector('.document-status')).toBeNull()
   fireEvent.click(screen.getAllByRole('button', { name: '下载 Word' })[0])
   await waitFor(() => expect(save).toHaveBeenCalledWith(expect.any(Blob), '第1批正文.docx'))
   expect(read).toHaveBeenCalledWith('/assets-data/abc/第1批正文.docx', 'stored-session')
@@ -88,4 +90,33 @@ test('资料刷新按钮禁用时说明需要先准备会话', () => {
   workspace.session.set({ storedId: '', runtimeId: '', info: {} })
   render(<Inspector selected={null} onSelect={() => {}} onClose={() => {}} />)
   expect(screen.getByRole('button', { name: '刷新创作资料' }).closest('[data-tooltip]')?.getAttribute('data-tooltip')).toBe('连接创作服务后才能刷新资料。')
+})
+
+test('具有前版身份的稿件在资料栏合并为最新版并注明版本数', () => {
+  workspace.project.set({ id: 'p', title: '项目', stage: '', artifacts: [
+    { id: 'a1', contentSha256: 'a'.repeat(64), name: '第1集剧本正文', content: '首稿', kind: 'result', downloadPath: '/assets-data/a1', downloadFormat: 'docx' },
+    { id: 'a2', previousDocumentId: 'a1', previousContentSha256: 'a'.repeat(64), name: '第1集剧本正文', content: '返修版', kind: 'result', downloadPath: '/assets-data/a2', downloadFormat: 'docx' },
+    { id: 'b1', name: '第2集剧本正文', content: '正文', kind: 'result', downloadPath: '/assets-data/b1', downloadFormat: 'docx' },
+  ] })
+  const selected: unknown[] = []
+  render(<Inspector selected={null} onSelect={file => selected.push(file)} onClose={() => {}} />)
+  const rows = screen.getAllByRole('button').filter(button => button.classList.contains('file-row'))
+  expect(rows.map(row => row.querySelector('strong')?.textContent)).toEqual(['第1集剧本正文', '第2集剧本正文'])
+  expect(rows[0].textContent).toContain('第 2 版（最新）')
+  fireEvent.click(rows[0])
+  expect((selected[0] as { id: string }).id).toBe('a2')
+})
+
+
+test('历史质量状态不在资料栏或稿件卡显示，Word 下载入口仍保留', () => {
+  const artifacts = ['checked', 'revision_required'].map((reviewStatus, index) => ({
+    id: 'doc-' + index, name: '稿件' + index, content: '第1集\n\n△她推门。', kind: 'result' as const,
+    documentKind: 'script', downloadPath: '/assets-data/doc-' + index + '.docx', downloadName: '稿件' + index + '.docx',
+    downloadFormat: 'docx', reviewStatus: reviewStatus as 'checked' | 'revision_required'
+  }))
+  workspace.project.set({ id: 'p', title: '项目', stage: '', artifacts })
+  render(<><Inspector selected={null} onSelect={() => {}} onClose={() => {}} />{artifacts.map(artifact => <ManuscriptDelivery key={artifact.id} artifact={artifact} showDownload />)}</>)
+  expect(document.body.textContent).not.toMatch(/通过|核验/)
+  expect(screen.getByRole('button', { name: /稿件0.*可下载/ })).toBeTruthy()
+  expect(screen.getAllByRole('button', { name: /稿件[01]\.docx/ })).toHaveLength(2)
 })

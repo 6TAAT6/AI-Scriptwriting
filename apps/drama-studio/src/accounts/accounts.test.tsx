@@ -11,7 +11,6 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 beforeEach(() => {
   clearAuthentication()
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); this.dispatchEvent(new Event('close')) }
 })
@@ -225,6 +224,64 @@ test('没有退出动画时设置可以立即关闭，不依赖动画结束事�
   fireEvent.click(screen.getByRole('button', { name: '关闭设置' }))
   expect(dialog.open).toBe(false)
   expect(onClose).toHaveBeenCalledOnce()
+})
+
+test('停用的模型接入在后台标出，绑定到它的品牌入口提示改选', async () => {
+  vi.stubGlobal('fetch', async (url: string) => {
+    if (url === '/studio/auth/me') return json({ user: root, csrfToken: 'paused-csrf' })
+    if (url === '/studio/admin/users') return json({ users: [root] })
+    if (url === '/studio/admin/models') return json({ endpoints: [{ id: 'paused', name: 'GPT', base_url: 'https://paused.example/v1', model: 'paused-model', models: ['paused-model'], api_mode: 'codex_responses', has_api_key: true, enabled: false }] })
+    if (url === '/studio/admin/model-names') return json({ models: [{ id: 'brand-text-1', kind: 'text', provider: 'paused', model: 'paused-model', display_name: '巨豹满血版 V1.1', visible: true }], targets: [], disabled_targets: [{ provider: 'paused', provider_name: 'GPT' }] })
+    throw new Error(`测试中没有实现此接口：${url}`)
+  })
+  await loadCurrentUser()
+  render(<AccountsSettings onClose={() => {}} />)
+  fireEvent.click(screen.getByRole('button', { name: '模型接入' }))
+  expect((await screen.findByRole('heading', { name: /GPT/ })).textContent).toContain('已停用')
+  await screen.findByText('接入「GPT」已停用，员工看不到这个入口。请改选已启用的接入，或删除该入口。')
+})
+
+test('接入卡片可停用和重新启用，默认接入不提供停用按钮，失败原因原样提示', async () => {
+  const toggles: unknown[] = []
+  let endpoints = [
+    { id: 'base', name: '默认 GPT', base_url: 'https://base.example/v1', model: 'base-model', models: ['base-model'], api_mode: 'chat_completions', has_api_key: true, is_current: true, enabled: true },
+    { id: 'proxy', name: '代理谷歌官key', base_url: 'http://127.0.0.1:18080/v1beta/openai', model: 'gemini-4-hydrogen', models: ['gemini-4-hydrogen'], api_mode: 'chat_completions', has_api_key: true, enabled: true }
+  ]
+  let refuse = false
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    if (url === '/studio/auth/me') return json({ user: root, csrfToken: 'toggle-csrf' })
+    if (url === '/studio/admin/users') return json({ users: [root] })
+    if (url === '/studio/admin/models') return json({ endpoints })
+    if (url === '/studio/admin/model-names') return json({ models: [], targets: [] })
+    if (url === '/studio/admin/models/enabled') {
+      const body = JSON.parse(String(init?.body)); toggles.push(body)
+      if (refuse) return json({ error: '停用后员工将没有可用的文字模型入口。' }, 400)
+      endpoints = endpoints.map(row => row.id === body.id ? { ...row, enabled: body.enabled } : row)
+      return json({ ok: true, endpoints, message: body.enabled ? '已启用「代理谷歌官key」。' : '已停用「代理谷歌官key」。' })
+    }
+    throw new Error(`测试中没有实现此接口：${url}`)
+  })
+  await loadCurrentUser()
+  render(<AccountsSettings onClose={() => {}} />)
+  fireEvent.click(screen.getByRole('button', { name: '模型接入' }))
+  await screen.findByRole('heading', { name: /代理谷歌官key/ })
+  expect(screen.queryByRole('switch', { name: /默认 GPT/ })).toBeNull()
+  expect(screen.getByText('默认接入')).toBeTruthy()
+  const changed = vi.fn(); window.addEventListener('studio:models-changed', changed)
+  fireEvent.click(screen.getByRole('switch', { name: '停用代理谷歌官key' }))
+  await screen.findByText('已停用「代理谷歌官key」。')
+  expect((await screen.findByRole('heading', { name: /代理谷歌官key/ })).textContent).toContain('已停用')
+  expect(screen.getByRole('switch', { name: '启用代理谷歌官key' }).getAttribute('aria-checked')).toBe('false')
+  fireEvent.click(screen.getByRole('switch', { name: '启用代理谷歌官key' }))
+  await screen.findByText('已启用「代理谷歌官key」。')
+  expect(screen.getByRole('heading', { name: /代理谷歌官key/ }).textContent).not.toContain('已停用')
+  refuse = true
+  fireEvent.click(screen.getByRole('switch', { name: '停用代理谷歌官key' }))
+  await screen.findByText('停用后员工将没有可用的文字模型入口。')
+  expect(screen.getByRole('switch', { name: '停用代理谷歌官key' }).getAttribute('aria-checked')).toBe('true')
+  expect(toggles).toEqual([{ id: 'proxy', enabled: false }, { id: 'proxy', enabled: true }, { id: 'proxy', enabled: false }])
+  expect(changed).toHaveBeenCalledTimes(2)
+  window.removeEventListener('studio:models-changed', changed)
 })
 
 test('模型接入仅超级管理员可见，保存后清空密钥并展示已配置状态', async () => {

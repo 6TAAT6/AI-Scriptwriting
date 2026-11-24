@@ -32,6 +32,7 @@ export class WorkerPool {
     this.ipcRoot = ipcRoot
     this.workers = new Map()
     this.pending = new Map()
+    this.startFailures = new Map()
     this.scopeOwners = new Map()
     this.generations = new Map()
     this.revoking = new Map()
@@ -138,7 +139,22 @@ export class WorkerPool {
     const existing = this.workers.get(user.profile)
     if (existing) return existing
     if (this.pending.has(user.profile)) return this.pending.get(user.profile)
-    const promise = this.start(user, home, generation).finally(() => { if (this.pending.get(user.profile) === promise) this.pending.delete(user.profile) })
+    const previous = this.startFailures.get(user.profile)
+    if (previous && previous.retryAt > Date.now()) {
+      throw Object.assign(new Error('员工创作服务启动未完成，请稍后重连。'), {
+        status: 503, retryAfterSeconds: Math.ceil((previous.retryAt - Date.now()) / 1000)
+      })
+    }
+    const promise = this.start(user, home, generation).then(worker => {
+      this.startFailures.delete(user.profile)
+      return worker
+    }, error => {
+      if (!this.closed && (this.generations.get(user.profile) || 0) === generation) {
+        const attempts = (previous?.attempts || 0) + 1
+        this.startFailures.set(user.profile, { attempts, retryAt: Date.now() + Math.min(60_000, 5000 * 2 ** Math.min(attempts - 1, 4)) })
+      }
+      throw error
+    }).finally(() => { if (this.pending.get(user.profile) === promise) this.pending.delete(user.profile) })
     this.pending.set(user.profile, promise)
     return promise
   }
@@ -164,6 +180,7 @@ export class WorkerPool {
     return stopped
   }
   revoke(profile) {
+    this.startFailures.delete(profile)
     this.generations.set(profile, (this.generations.get(profile) || 0) + 1)
     this.scopeOwners.delete(profile)
     this.broker?.revoke(profile)

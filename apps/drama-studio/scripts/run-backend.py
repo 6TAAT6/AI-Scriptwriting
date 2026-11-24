@@ -23,6 +23,12 @@ def main():
     token = (home / "studio" / "runtime-token").read_text().strip()
     if len(token) < 32:
         raise ValueError("工作区服务凭证不可用。")
+    # 运营 profile 的插件副本与员工工作区一样，在启动前对齐到本次发布的业务代码。
+    # 同步代码会导入 Hermes 模块，必须从本次 release 导入：运行环境的可编辑安装可能登记着已删除的旧 release。
+    import sys
+    sys.path[:0] = [str(repo / "apps/drama-studio/server"), str(repo)]
+    from profiles import sync_operator_capabilities
+    sync_operator_capabilities(home)
     # 当前入口所在 release 是代码导入根。配置可能从旧 release 继承，
     # 不能让 core 与入口脚本加载不同版本的 Hermes 模块。
     env = {**os.environ, "HERMES_HOME": str(home), "HERMES_RUNTIME_DIR": runtime["runtimeDir"],

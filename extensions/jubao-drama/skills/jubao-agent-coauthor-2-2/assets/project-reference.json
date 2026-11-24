@@ -1,0 +1,130 @@
+{
+  "reference_only": true,
+  "persisted_project_state": false,
+  "purpose": "仅映射Hermes真实资料与用户决定；不是已创建JSON项目，不触发原包文件状态机。",
+  "project_name": null,
+  "total_episodes": null,
+  "language": {
+    "default": "zh-CN",
+    "explicit_user_request_first": true
+  },
+  "episode_length_default": {
+    "minimum": 1000,
+    "maximum": 1200,
+    "metric": "han_characters",
+    "target": "script",
+    "explicit_user_range_and_metric_first": true
+  },
+  "documents": {
+    "contract": {
+      "description": "创作契约",
+      "document_id": null,
+      "content_sha256": null
+    },
+    "synopsis": {
+      "description": "完整故事梗概",
+      "document_id": null,
+      "content_sha256": null
+    },
+    "core_expectation": {
+      "description": "核心期待",
+      "document_id": null,
+      "content_sha256": null
+    },
+    "overall_outline": {
+      "description": "完整全剧总纲",
+      "document_id": null,
+      "content_sha256": null
+    },
+    "episode_map": {
+      "description": "全剧逐集导航",
+      "document_id": null,
+      "content_sha256": null
+    },
+    "canon": {
+      "description": "世界关系与能力限制",
+      "document_id": null,
+      "content_sha256": null
+    },
+    "style": {
+      "description": "用户确认的写法基准",
+      "document_id": null,
+      "content_sha256": null
+    },
+    "disclosure": {
+      "description": "实际知情与伏笔",
+      "document_id": null,
+      "content_sha256": null
+    },
+    "human_feel": {
+      "description": "本项目人味方法",
+      "document_id": null,
+      "content_sha256": null
+    },
+    "highlights": {
+      "description": "所选创意机制与落点",
+      "document_id": null,
+      "content_sha256": null
+    }
+  },
+  "gates": {
+    "g1": {
+      "status": "unconfirmed",
+      "actual_user_message": null,
+      "artifact_document_id": null,
+      "artifact_version": null
+    },
+    "g2": {
+      "status": "unconfirmed",
+      "actual_user_message": null,
+      "artifact_document_id": null,
+      "artifact_version": null
+    },
+    "g3_brief": {
+      "status": "unconfirmed",
+      "actual_user_message": null,
+      "artifact_document_id": null,
+      "artifact_version": null
+    },
+    "g3_detailed": {
+      "status": "unconfirmed",
+      "actual_user_message": null,
+      "artifact_document_id": null,
+      "artifact_version": null
+    },
+    "g4": {
+      "status": "unconfirmed",
+      "actual_user_message": null,
+      "artifact_document_id": null,
+      "artifact_version": null
+    },
+    "g5": {
+      "status": "unconfirmed",
+      "actual_user_message": null,
+      "artifact_document_id": null,
+      "artifact_version": null
+    }
+  },
+  "continuation": {
+    "mode": "next_batch_only",
+    "actual_user_message": null,
+    "start": null,
+    "end": null,
+    "paused": false
+  },
+  "characters": [],
+  "events": [],
+  "episodes": [],
+  "actual_state": {
+    "basis_documents": [],
+    "facts": [],
+    "unverified": []
+  },
+  "deliveries": [],
+  "final_script": {
+    "document_id": null,
+    "content_sha256": null,
+    "actual_user_confirmation": null
+  },
+  "authority_note": "这些空字段没有业务效力；保存、核验、独立执行和确认仅由实际宿主回执及当前用户消息证明。"
+}

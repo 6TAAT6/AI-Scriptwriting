@@ -1,9 +1,9 @@
 .activation-code-cell { min-width: 260px; max-width: 320px; }
 .activation-code-cell input { width: 100%; min-width: 280px; padding: 5px 0; font: 11px/1.6 ui-monospace, monospace; color: var(--text); }
-.activation-code-cell small { display: block; margin-top: 5px; font-size: 10px; color: var(--muted); }
+.activation-code-cell small { display: block; margin-top: 5px; font-size: 12px; color: var(--muted); }
 .activation-code-actions { flex-wrap: nowrap; }
-.activation-delete-confirm { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 15px; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: 12px; }
+.activation-delete-confirm { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 15px; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: 13px; }
 .activation-delete-confirm > div { flex: 1; min-width: 220px; }
-.activation-delete-confirm p { color: var(--subtle); font-size: 11px; line-height: 1.7; margin: 5px 0 0; }
-.activation-codes .account-list-toolbar > span { font-size: 12px; color: var(--subtle); }
+.activation-delete-confirm p { color: var(--subtle); font-size: 12px; line-height: 1.7; margin: 5px 0 0; }
+.activation-codes .account-list-toolbar > span { font-size: 13px; color: var(--subtle); }
 .account-status.pending { color: #a17823; }

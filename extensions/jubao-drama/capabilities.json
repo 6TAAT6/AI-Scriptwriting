@@ -3,64 +3,182 @@
     "id": "gm3-1",
     "kind": "agent",
     "skill": "jubao-agent-gm3-1",
-    "display_name": "巨豹 Agent1-适配巨豹满血版 V1.1",
+    "display_name": "巨豹 Agent1 · 适配满血版 V1.1",
     "label": "巨豹 Agent1 · 适配满血版 V1.1",
     "aliases": "满血版 v1.1 gm gm3 gm3.1",
-    "description": "端到端中文剧本创作总控规则。",
+    "description": "统筹中文剧本创作的完整流程。",
     "legacy_names": [
       "巨豹 Agent-适配 GM3.1 版本",
-      "巨豹 Agent-适配巨豹满血版 V1.1"
-    ]
+      "巨豹 Agent-适配巨豹满血版 V1.1",
+      "巨豹 Agent1-适配巨豹满血版 V1.1"
+    ],
+    "module_count": 1
+  },
+  {
+    "id": "coauthor-2-2",
+    "kind": "agent",
+    "skill": "jubao-agent-coauthor-2-2",
+    "display_name": "巨豹 Agent2.2 · 适配巨豹满血版 V1.1",
+    "label": "巨豹 Agent2.2 · 适配巨豹满血版 V1.1",
+    "aliases": "Agent2.2 v2.2 coauthor coauthor-2-2 满血版 v1.1",
+    "description": "协同完成创意、改编、大纲与剧本。",
+    "legacy_names": [
+      "巨豹 Agent2.2-适配巨豹满血版 V1.1"
+    ],
+    "module_count": 8,
+    "default_script_length": {
+      "minimum": 1400,
+      "maximum": 1600
+    },
+    "length_report": "han_and_net",
+    "length_revision": true
+  },
+  {
+    "id": "vee-2-1",
+    "kind": "agent",
+    "skill": "jubao-agent-vee-2-1",
+    "display_name": "Peter Agent· Vee海外竖屏短剧V2.1",
+    "label": "Peter Agent· Vee海外竖屏短剧V2.1",
+    "aliases": "vee 瓦莱里娅 peter 海外 竖屏 短剧 v2.1",
+    "description": "海外付费竖屏短剧改编，从构思到正文逐区确认。",
+    "legacy_names": [
+      "Vee（瓦莱里娅）·V2.1决定版",
+      "Vee·V2.1决定版"
+    ],
+    "module_count": 1,
+    "own_protocol": true
+  },
+  {
+    "id": "novel-1-0",
+    "kind": "agent",
+    "skill": "jubao-agent-novel-1-0",
+    "display_name": "小说 Agent V1.0",
+    "label": "小说 Agent V1.0",
+    "aliases": "小说 网文 写小说 长篇 短篇 连载 番茄 续写 章节 novel",
+    "description": "通用中文小说创作，短篇长篇从构思到逐章成稿。",
+    "module_count": 7,
+    "own_protocol": true,
+    "host_tools": [
+      "drama_agent_document",
+      "drama_story_bible",
+      "clarify",
+      "todo_list"
+    ],
+    "protocol_rule": "当前主 Agent 为小说 Agent V1.0，自带完整的小说创作流程、正文排版、稿件保存与收尾规则，一切以其规则原文为准；宿主的剧本排版、分集字数和剧本类建议规则本轮不适用。面向用户的说明严肃、专业、直接，不使用表情符号或装饰性等待文案；只陈述实际进展，不展示内部自检、评分和工具回执。需要用户确认或在几个选项中选择时，正文只说明要决定什么，不在正文里列“请选择 1/2/3”，选项本身就是本轮的建议卡，推荐项排第一；只有无法给出合理选项的关键问题才用 clarify 提问，每轮最多一次，提问后停止本轮。每个已完成回合都在自然语言回复后另起一行输出且只输出一个 studio-suggestions 代码块，内容为有效 JSON 数组，包含一至四个下一步提示词；每个对象必须有 label 和 prompt，可选 recommended 布尔字段，最多一个为 true。label 不超过 30 字，写成用户要做的动作（如“写第4章”“审查第1—10章”），不写评价，不替用户表态；prompt 是用户可以直接发送的完整请求，不超过 300 字。只依据本对话中的用户原话和实际已保存的进度，不编造进度、确认或评价，不超出规划的总章数，不重复已完成、已拒绝的工作。执行中的进度说明和调用了 clarify 的回合不输出建议。建议代码块不写进小说正文和稿件。"
   },
   {
     "id": "oa6-1",
     "kind": "agent",
     "skill": "jubao-agent-oa6-1",
-    "display_name": "巨豹 Agent2-适配巨豹测试版 V2.1",
-    "label": "巨豹 Agent2 · 适配测试版 V2.1",
+    "display_name": "巨豹 Agent2 · 适配创作版 V2.1",
+    "label": "巨豹 Agent2 · 适配创作版 V2.1",
     "aliases": "测试版 v2.1 oa6 oa6.1",
     "description": "原项目剧本创作、审稿和导出规则。",
     "legacy_names": [
       "巨豹 Agent-适配 OA6.1 版本",
-      "巨豹 Agent-适配巨豹测试版 V2.1"
-    ]
+      "巨豹 Agent-适配巨豹测试版 V2.1",
+      "巨豹 Agent2-适配巨豹测试版 V2.1",
+      "巨豹 Agent2 · 适配测试版 V2.1"
+    ],
+    "module_count": 1,
+    "hidden": true
   },
   {
     "id": "gr4-7",
     "kind": "agent",
     "skill": "jubao-agent-gr4-7",
-    "display_name": "巨豹 Agent3-适配巨豹试用版 V3.0",
+    "display_name": "巨豹 Agent3 · 适配试用版 V3.0",
     "label": "巨豹 Agent3 · 适配试用版 V3.0",
     "aliases": "试用版 v3.0 gr gr4 gr4.7",
-    "description": "全格式影视编剧规则。",
+    "description": "支持多种影视格式的剧本创作。",
     "legacy_names": [
       "巨豹 Agent-适配 GR4.7 版本",
-      "巨豹 Agent-适配巨豹试用版 V3.0"
-    ]
+      "巨豹 Agent-适配巨豹试用版 V3.0",
+      "巨豹 Agent3-适配巨豹试用版 V3.0"
+    ],
+    "module_count": 1,
+    "hidden": true
+  },
+  {
+    "id": "movie-development",
+    "kind": "agent",
+    "skill": "jubao-agent-movie-development",
+    "display_name": "巨豹 Agent · 电影剧本开发",
+    "label": "巨豹 Agent · 电影剧本开发",
+    "description": "统筹电影创意、结构、人物、场景、对白与改写。",
+    "aliases": "电影剧本开发 电影剧本 movie-development",
+    "legacy_names": [],
+    "module_count": 25,
+    "hidden": true
   },
   {
     "id": "outline-script",
     "kind": "skill",
     "skill": "jubao-skill-outline-script",
-    "display_name": "巨豹skill-大纲变剧本",
-    "label": "skill-大纲变剧本",
+    "display_name": "巨豹 skill · 大纲变剧本",
+    "label": "巨豹 skill · 大纲变剧本",
     "aliases": "大纲 编剧 扩写 outline",
-    "description": "将已有大纲扩写为分集剧本，可单独使用或叠加到一个主 Agent。",
+    "description": "将已确认的大纲扩写为分集剧本。",
     "legacy_names": [
       "巨豹大纲变剧本",
-      "巨豹 skill-大纲变剧本"
-    ]
+      "巨豹 skill-大纲变剧本",
+      "巨豹skill-大纲变剧本",
+      "skill-大纲变剧本"
+    ],
+    "module_count": 1
   },
   {
     "id": "humanize",
     "kind": "skill",
     "skill": "jubao-skill-humanize",
-    "display_name": "巨豹skill-去AI味",
-    "label": "skill-去 AI 味",
+    "display_name": "巨豹 skill · 去 AI 味",
+    "label": "巨豹 skill · 去 AI 味",
     "aliases": "去AI味 去ai味 润色 humanize",
-    "description": "按剧本场景优化台词和描写，保留剧情、人物声音与格式，可叠加使用。",
+    "description": "优化台词与描写，保留人物风格。",
     "legacy_names": [
-      "巨豹去 AI 味"
+      "巨豹去 AI 味",
+      "巨豹skill-去AI味",
+      "skill-去 AI 味"
+    ],
+    "module_count": 7
+  },
+  {
+    "id": "script-review",
+    "kind": "skill",
+    "skill": "jubao-skill-script-review",
+    "display_name": "巨豹 skill · 剧本评估",
+    "label": "巨豹 skill · 剧本评估",
+    "description": "评估故事、人物、节奏与逻辑。",
+    "aliases": "剧本评估 剧本审稿 script-review",
+    "legacy_names": [],
+    "module_count": 29
+  },
+  {
+    "id": "north-america-comic",
+    "kind": "skill",
+    "skill": "jubao-skill-north-america-comic",
+    "display_name": "巨豹 skill · 北美 AI 漫剧",
+    "label": "skill · 北美 AI 漫剧",
+    "aliases": "北美 AI漫剧 动态漫画 海外 竖屏 north-america comic",
+    "description": "面向北美受众的漫剧创作与改编。",
+    "legacy_names": [
+      "巨豹skill-北美 AI 漫剧",
+      "巨豹skill-北美 Ai 漫剧"
     ]
+  },
+  {
+    "id": "content-compliance",
+    "kind": "skill",
+    "skill": "jubao-skill-content-compliance",
+    "display_name": "巨豹 skill · 漫剧剧本内容合规审核规范",
+    "label": "巨豹 skill · 漫剧剧本内容合规审核规范",
+    "description": "检查内容合规风险，提供修改建议。",
+    "aliases": "漫剧 剧本 内容 合规 审核 规范 内容安全 content compliance",
+    "legacy_names": [
+      "skill . 漫剧剧本内容合规审核规范",
+      "巨豹skill. 漫剧剧本内容合规审核规范",
+      "巨豹skill-漫剧剧本内容合规审核规范"
+    ],
+    "module_count": 1
   }
 ]

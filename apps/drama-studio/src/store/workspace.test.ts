@@ -8,11 +8,66 @@ import { historyEntries } from '../lib/transcript'
 
 beforeEach(() => localStorage.clear())
 
+it('数字回复只解析当前已完成回复的明确选项，并保留用户原文回显', async () => {
+  const submitted: string[] = []
+  const workspace = new Workspace({ profile: 'numeric-choice', materials: async () => ({ project: null, sources: [] }),
+    rpc: (async (method, params) => {
+      if (method !== 'prompt.submit') throw new Error('不应创建其他请求')
+      submitted.push((params as { text: string }).text)
+      return { status: 'streaming' }
+    }) as WorkspaceApi['rpc'] })
+  workspace.session.set({ runtimeId: 'runtime', storedId: 'stored', info: {} })
+  const answer = '请问接下来希望执行哪项操作？\n```json\n' + JSON.stringify([
+    { label: '整理剧情摘要', prompt: '请总结当前大纲的核心剧情与主要人物关系。' },
+    { label: '撰写正文', prompt: '请根据已确认的大纲撰写第1—3集正文。' }
+  ]) + '\n```'
+  const conversation = { runtimeId: 'runtime', running: false, error: '', entries: [
+    { id: 'a', role: 'assistant' as const, text: answer, calls: [] }
+  ] }
+  workspace.conversation.set(conversation)
+  workspace.editComposer({ text: '1' })
+  await workspace.send()
+  expect(submitted[0].split('【本轮选项选择】\n')[1]?.split('【用户本轮消息】')[0]).toContain('请总结当前大纲的核心剧情与主要人物关系。')
+  expect(submitted[0].split('【本轮选项选择】\n')[1]?.split('【用户本轮消息】')[0]).not.toContain('撰写第1—3集')
+  expect(submitted[0].split('【用户本轮消息】\n')[1]).toBe('1')
+  expect(workspace.conversation.get().entries.at(-1)?.text).toBe('1')
+  for (const text of ['3', '1000', '1 集', '不是1', '1，先不要执行']) {
+    workspace.conversation.set(conversation)
+    workspace.editComposer({ text })
+    await workspace.send()
+    expect(submitted.at(-1)?.split('【用户本轮消息】\n')[1]).toBe(text)
+  }
+  workspace.conversation.set({ ...conversation, entries: [...conversation.entries, { id: 'later', role: 'assistant', text: '已收到其他修改意见。', calls: [] }] })
+  workspace.editComposer({ text: '1' })
+  await workspace.send()
+  expect(submitted.at(-1)?.split('【用户本轮消息】\n')[1]).toBe('1')
+})
+
 it('WebSocket 恢复后清除旧的断线提示，但保留其他业务错误', () => {
   const disconnected = { sessions: [], loading: false, error: '创作连接已断开，重新连接后可恢复已有进度。' }
   expect(clearConnectionErrorOnOpen('open', disconnected).error).toBe('')
   const business = { sessions: [], loading: false, error: '历史资料暂未同步。' }
   expect(clearConnectionErrorOnOpen('open', business).error).toBe('历史资料暂未同步。')
+})
+
+it('流式正文增量在短窗口内合并，避免每个 token 重新解析整段对话', async () => {
+  const workspace = new Workspace({ profile: 'stream-batch', materials: async () => ({ project: null, sources: [] }), rpc: () => { throw new Error('不应发送请求') } })
+  workspace.conversation.set({ runtimeId: 'runtime', entries: [], running: false, error: '' })
+  let updates = 0
+  const unsubscribe = workspace.conversation.subscribe(() => { updates++ })
+  const before = updates
+  workspace.receive({ type: 'message.start', session_id: 'runtime', payload: {} })
+  const afterStart = updates
+  workspace.receive({ type: 'message.delta', session_id: 'runtime', payload: { text: '甲' } })
+  workspace.receive({ type: 'message.delta', session_id: 'runtime', payload: { text: '乙' } })
+  expect(updates).toBe(afterStart)
+  await new Promise(resolve => setTimeout(resolve, 50))
+  expect(updates).toBe(afterStart + 1)
+  expect(workspace.conversation.get().entries.at(-1)?.text).toBe('甲乙')
+  workspace.receive({ type: 'message.complete', session_id: 'runtime', payload: { text: '甲乙', status: 'complete' } })
+  expect(workspace.conversation.get().entries.at(-1)?.pending).toBe(false)
+  expect(updates).toBeGreaterThan(before)
+  unsubscribe()
 })
 
 it('已有服务重放技术审批时直接拒绝，只有剧本业务确认进入创作卡片', () => {
@@ -129,7 +184,8 @@ it('续聊每次发送当前语言偏好，回显和历史恢复均保留用户�
   for (const language of ['仅中文', '中英双语']) {
     workspace.editComposer({ language, text: '继续下一集，保留角色名 Alice。' })
     await workspace.send()
-    expect(submitted.at(-1)).toBe(buildLanguageAwarePrompt('继续下一集，保留角色名 Alice。', language, '中国', { skills: [] }))
+    // 未出现在侧栏中的旧会话沿用默认项目，作为要求清单和设定库的创作范围随消息发送。
+    expect(submitted.at(-1)).toBe(buildLanguageAwarePrompt('继续下一集，保留角色名 Alice。', language, '中国', { skills: [] }, [], 'default'))
     expect(workspace.conversation.get().entries.at(-1)?.text).toBe('继续下一集，保留角色名 Alice。')
     workspace.conversation.set({ ...workspace.conversation.get(), running: false })
   }

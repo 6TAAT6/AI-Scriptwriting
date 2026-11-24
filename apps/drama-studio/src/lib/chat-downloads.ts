@@ -10,7 +10,7 @@ function linkedPaths(text: string): Set<string> {
   return paths
 }
 
-function manuscriptText(text: string): string {
+export function manuscriptText(text: string): string {
   return text.replace(/\r\n?/g, '\n').split('\n').map(line => line.trim())
     .filter(line => line && !/^(?:-{3,}|\*{3,}|_{3,})$/.test(line))
     .map(line => line.replace(/^#{1,6}\s+(.+?)(?:\s+#+)?$/, '$1').replace(/^\*\*(.+)\*\*$/, '$1'))

@@ -2,7 +2,7 @@ import { atom } from 'nanostores'
 import type { SessionLiveInfo, TranscriptMessage } from '../../../shared/src/gateway-contract.generated'
 
 export interface ImageModelSelection { model: string; provider: string }
-export interface CreativePreferences { region: string; language: string; imageModel?: ImageModelSelection }
+export interface CreativePreferences { region: string; language: string; imageModel?: ImageModelSelection; northAmericaSelected?: boolean }
 export interface StoredPreferences extends CreativePreferences { draftModel?: Pick<SessionLiveInfo, 'model' | 'provider' | 'reasoning_effort'> }
 export type PreferenceScope = readonly ['session', string] | readonly ['draft', string | null]
 
@@ -12,8 +12,9 @@ const identifier = (value: unknown): value is string => typeof value === 'string
 function parsePreferences(value: unknown): StoredPreferences | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return
   const row = value as Record<string, unknown>
-  if (!['中国', '欧美'].includes(String(row.region)) || !['仅中文', '中英双语'].includes(String(row.language))) return
-  const preferences: StoredPreferences = { region: String(row.region), language: String(row.language), imageModel: undefined }
+  if (!['中国', '北美', '欧美'].includes(String(row.region)) || !['仅中文', '中英双语'].includes(String(row.language))) return
+  const preferences: StoredPreferences = { region: row.region === '欧美' ? '北美' : String(row.region), language: String(row.language), imageModel: undefined }
+  if (typeof row.northAmericaSelected === 'boolean') preferences.northAmericaSelected = row.northAmericaSelected
   if (row.imageModel != null) {
     const image = row.imageModel as Record<string, unknown>
     if (!identifier(image.model) || !identifier(image.provider)) return
@@ -40,10 +41,10 @@ function messagePreferences(message: TranscriptMessage): CreativePreferences | u
   if (structured) {
     try { return parsePreferences(JSON.parse(structured[1])) } catch { return }
   }
-  const region = header.match(/创作故事时的地区偏好为(中国|欧美)，仅在本轮涉及故事创作且用户没有另行指定时使用。/)?.[1]
+  const region = header.match(/创作故事时的地区偏好为(中国|北美|欧美)，仅在本轮涉及故事创作且用户没有另行指定时使用。/)?.[1]
   const language = header.includes('用户已在创作设置中明确选择中英双语台词，台词按此选择生成；本轮消息中的明确语言要求优先。') ? '中英双语'
     : header.includes('当前创作设置为仅中文；历史项目或规则包中的默认双语不代表用户本轮要求双语。') ? '仅中文' : undefined
-  return region && language ? { region, language, imageModel: undefined } : undefined
+  return region && language ? { region: region === '欧美' ? '北美' : region, language, imageModel: undefined } : undefined
 }
 
 function historyPreferences(messages: TranscriptMessage[]): CreativePreferences | undefined {
@@ -81,9 +82,10 @@ export class SessionPreferenceStore {
     try {
       const raw = localStorage.getItem(key)
       if (raw !== null) {
-        const saved = parsePreferences(JSON.parse(raw))
+        const value = JSON.parse(raw), saved = parsePreferences(value)
         if (!saved) throw new Error('偏好记录格式不正确')
         this.report(key)
+        if (value.region === '欧美') this.save(profile, scope, saved)
         return saved
       }
       this.report(key)

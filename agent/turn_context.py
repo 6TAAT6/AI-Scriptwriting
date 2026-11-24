@@ -1313,6 +1313,16 @@ def build_api_messages(
         # wire for every route that does not replay it (OpenRouter/Nous do).
         api_messages.append(api_msg)
 
+    # 先让插件根据仍有元数据的源行投影正文；合并之后不能再可靠推断原消息边界。
+    from agent.api_message_projection import project_api_messages
+
+    api_messages = project_api_messages(
+        api_messages, canonical_messages, session_id=agent.session_id or "",
+        platform=getattr(agent, "platform", "") or "",
+        current_turn_index=next((index for index, row in enumerate(canonical_messages)
+                                 if row is current_turn_message), None),
+    )
+
     # A provider-rejected Anthropic signature is suppressed outside canonical history and
     # survives fresh request construction / process resume via session model_config.
     from agent.anthropic_thinking_replay import apply_rejected_thinking_suppression

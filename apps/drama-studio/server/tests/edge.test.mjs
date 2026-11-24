@@ -1,3 +1,4 @@
+import { fixtureModelEndpoints, fixtureModelCatalog } from './model-fixtures.mjs'
 import { fixtureActivationCode } from './account-fixtures.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -18,6 +19,7 @@ async function fixture(t) {
   const backend = createServer((req, res) => {
     if (req.url === '/') return res.end(`<script>window.__HERMES_SESSION_TOKEN__ = "${backendToken}";</script>`)
     if (req.headers['x-hermes-session-token'] !== backendToken) { res.writeHead(401); return res.end() }
+    if(fixtureModelEndpoints(req,res))return;
     const url = new URL(req.url, 'http://localhost')
     if (url.pathname.startsWith('/api/sessions/')) {
       const owner = url.searchParams.get('profile')
@@ -35,7 +37,7 @@ async function fixture(t) {
       const frame = JSON.parse(data)
       if (!frame.method) return
       const p = frame.params || {}
-      let result = { accepted: true, echo: p }
+      let result = frame.method==='model.options' ? fixtureModelCatalog(p.profile) : { accepted: true, echo: p }
       if (frame.method === 'session.create') {
         result = { session_id: `${p.profile}-live`, stored_session_id: `${p.profile}-stored`, messages: [], info: {} }
         for (const seq of [1, 2, 3]) ws.send(JSON.stringify({jsonrpc:'2.0',method:'event',params:{type:'message.delta',session_id:result.session_id,payload:{delta:String(seq)}}}))
@@ -134,7 +136,9 @@ test('HTTP与WebSocket共同拒绝跨账号会话、profile、任意文件和未
   let eventsDone
   const allEvents=new Promise(resolve=>{eventsDone=resolve})
   ws.on('message',data=>{const frame=JSON.parse(data);if(frame.params?.type==='message.delta'){received.push(frame.params.payload.text);if(received.length===3)eventsDone()}})
+  assert.equal((await rpc('catalog','model.options',{})).error,undefined)
   const own=await rpc('create','session.create',{})
+  assert.equal(own.error,undefined)
   await allEvents
   assert.deepEqual(received,['1','2','3'])
   assert.equal(own.result.session_id,`${profile}-live`)

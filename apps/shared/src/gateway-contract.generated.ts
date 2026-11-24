@@ -517,6 +517,8 @@ export interface ConfigSetResult {
 export interface SessionLiveInfo {
   model?: string
   provider?: string
+  model_selection_required?: boolean
+  model_selection_error?: string
   reasoning_effort?: string
   reasoning_effort_wire?: string
   service_tier?: string
@@ -3224,6 +3226,8 @@ export interface SessionCwdSetParams {
 export interface SessionCwdSetResult {
   model?: string
   provider?: string
+  model_selection_required?: boolean
+  model_selection_error?: string
   reasoning_effort?: string
   reasoning_effort_wire?: string
   service_tier?: string
@@ -4645,6 +4649,10 @@ export interface ToolCompletePayload {
   todos?: unknown[] | null
   revision?: number | null
   labels?: ToolLabel[] | null
+  blocked_reason?: string | null
+  required_user_action?: string | null
+  retryable?: boolean | null
+  tool?: string | null
 }
 /** ``agent_callbacks`` tool_gen_callback. */
 export interface ToolGeneratingPayload {

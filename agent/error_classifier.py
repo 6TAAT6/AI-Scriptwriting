@@ -170,6 +170,10 @@ _USAGE_LIMIT_TRANSIENT_SIGNALS = (
     "try again", "retry", "resets at", "reset in", "resets in", "reset after", "available in",
     "wait", "requests remaining", "periodic", "window", "per minute", "per second",
 )
+# OpenRouter answers 402 ``in_flight_budget_exhausted`` (with ``Retry-After``) when the balance
+# cannot cover the requests still running — admission control that clears once they settle, not
+# an empty account. A depleted balance still arrives as "insufficient credits" and stays billing.
+_IN_FLIGHT_BUDGET_PATTERNS = ("in_flight_budget_exhausted", "current in-flight requests")
 
 # 413 detected from message text (proxies embed the status or re-wrap
 # Anthropic's "request_too_large" type without one).
@@ -1089,8 +1093,9 @@ def _status_5xx(c: _Ctx) -> Verdict:
 
 def _classify_402(error_msg: str, result_fn: Callable[..., Any]) -> Any:
     """Disambiguate 402: "usage limit, try again in 5 minutes" is a periodic quota, not billing."""
-    transient = any(p in error_msg for p in _USAGE_LIMIT_PATTERNS) and any(
-        p in error_msg for p in _USAGE_LIMIT_TRANSIENT_SIGNALS
+    transient = any(p in error_msg for p in _IN_FLIGHT_BUDGET_PATTERNS) or (
+        any(p in error_msg for p in _USAGE_LIMIT_PATTERNS)
+        and any(p in error_msg for p in _USAGE_LIMIT_TRANSIENT_SIGNALS)
     )
     return result_fn(**(_V_RATE_LIMIT if transient else _V_BILLING))
 

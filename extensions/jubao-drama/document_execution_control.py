@@ -236,6 +236,16 @@ def _report(plan, view, reason):
             lines += ['WPS 实机验收：本轮没有实际打开 WPS 的验收证据，不能宣称通过。']
         if plan['requested'].get('cache'):
             lines += ['缓存原因：本轮没有客户端故障证据，不能据服务端文件非空推断当时打开空白是缓存导致。']
+    comparison=view['facts'].get('comparison')
+    if comparison:
+        lines += [f'已在本轮完整读取当前稿《{comparison["current"]["name"]}》及其直接前版《{comparison["previous"]["name"]}》，两份版本关系和原文摘要均已核对。']
+        for label in ('current','previous'):
+            lines += [('当前稿' if label=='current' else '直接前版')+'编号：'+comparison[label]['document_id']+'。']
+            totals=(comparison[label].get('statistics') or {}).get('episode_body_totals') or {}
+            if totals.get('coverage_complete'):
+                lines += [('当前稿' if label=='current' else '直接前版')+f'正文：{totals["han_characters"]}汉字，{totals["non_whitespace_characters"]}个非空白字符。']
+        if comparison['locked_prefix_unchanged'] is not None:
+            lines += ['本次结尾修改的锁定前文逐字一致。' if comparison['locked_prefix_unchanged'] else '本次结尾修改的锁定前文存在差异，不能称为逐字一致。']
     if view['missing']:
         lines += ['未完成：' + '、'.join(_LABELS[item] for item in view['missing']) + '。']
         lines += [_REASONS.get(reason, '模型本轮没有完成这些工具动作，不能用历史回执替代本轮核查。')]

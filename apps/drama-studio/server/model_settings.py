@@ -1,10 +1,14 @@
 """工作区完整模型列表的原子保存适配，复用 Hermes 的密钥与配置写入机制。"""
 
+import json
+from pathlib import Path
 import re
 
 from fastapi import APIRouter, HTTPException
 from hermes_cli.web_models import CustomEndpointUpdate
 from hermes_cli.web_routers import config_env
+from hermes_constants import get_hermes_home
+from pydantic import BaseModel, ConfigDict, Field
 
 
 router = APIRouter()
@@ -15,11 +19,32 @@ class StudioEndpointUpdate(CustomEndpointUpdate):
     image_models: list[str] | None = None
 
 
+class StudioEndpointState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    enabled: bool
+
+
+def compression_operator():
+    """压缩策略 v2 的 operator_provider；它被停用时 core 启动会找不到摘要模型而反复重启。"""
+    # 与 profiles.py 的 _summary_policy 同一路径：工作区 home 的上两级是 state 目录。
+    path = Path(get_hermes_home()).parent.parent / "studio" / "compression-policy.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    return value.get("operator_provider") if isinstance(value, dict) else None
+
+
 def response(config):
     result = config_env._custom_endpoint_response(config)
+    providers = config.get("providers") if isinstance(config.get("providers"), dict) else {}
     for row in result.get("endpoints", []):
         entry = (config.get("image_gen") or {}).get("studio_endpoints", {}).get(row["id"], {})
-        row.update(image_model=entry.get("model", ""), image_models=entry.get("models", []))
+        provider = providers.get(row["id"])
+        # 员工配置跳过 enabled: false 的接入；后台必须看到同一状态，否则品牌入口会绑到前台不显示的模型上。
+        disabled = isinstance(provider, dict) and provider.get("enabled") is False
+        row.update(image_model=entry.get("model", ""), image_models=entry.get("models", []), enabled=not disabled)
     return result
 
 
@@ -62,3 +87,27 @@ def save_model_endpoint(body: StudioEndpointUpdate, profile: str):
         entry["discover_models"] = False
         config_env.save_config(config)
         return {**response(config), "ok": True, "id": endpoint_id}
+
+
+@router.post("/api/studio/model-endpoints/enabled")
+def set_model_endpoint_enabled(body: StudioEndpointState, profile: str):
+    # 只切换启用状态：普通保存在原条目上合并字段，会保留这里写入的 enabled。
+    if profile != "jubao-drama":
+        raise HTTPException(status_code=403, detail="不能修改其他工作区的模型接入。")
+    with config_env._config_profile_scope(profile), config_env._CONFIG_MUTATION_LOCK:
+        config = config_env.load_config()
+        providers = config.get("providers") if isinstance(config.get("providers"), dict) else {}
+        entry = providers.get(body.id)
+        row = next((item for item in response(config).get("endpoints", []) if item.get("id") == body.id), None)
+        if not isinstance(entry, dict) or row is None:
+            raise HTTPException(status_code=404, detail="模型接入不存在，请刷新后重试。")
+        if body.enabled:
+            entry.pop("enabled", None)
+        else:
+            if row.get("is_current"):
+                raise HTTPException(status_code=400, detail="这是默认接入，员工对话和上下文压缩都依赖它，不能停用。")
+            if compression_operator() == body.id:
+                raise HTTPException(status_code=400, detail="上下文压缩正在使用这个接入，停用后服务无法启动，不能停用。")
+            entry["enabled"] = False
+        config_env.save_config(config)
+        return {**response(config), "ok": True, "id": body.id}

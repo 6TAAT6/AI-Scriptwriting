@@ -1,8 +1,12 @@
 import { publicError, publicRuntimeFailure, errorEventPayload } from '../shared/public-errors.mjs'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { isEmployee } from './file-handles.mjs'
 import { enrichReasoning, safeCapabilities } from './reasoning.mjs'
 import { publicStatus, publicSkillArguments, publicSkillSummary, subagentFields, subagentStatuses, displayKinds, noticeTexts } from './presentation-activity.mjs'
+
+const catalog = JSON.parse(readFileSync(new URL('../../../extensions/jubao-drama/capabilities.json', import.meta.url), 'utf8'))
+const documentOwners = new Set(['independent-skills', ...catalog.filter(row => row.kind === 'agent').map(row => row.id)])
 
 const object = value => {
   if (typeof value === 'string') { try { return object(JSON.parse(value)) } catch { return null } }
@@ -115,7 +119,7 @@ function projectText(value, tokens, final = true, previous = '') {
   }
   return { text, tail: '' }
 }
-const publicTools = new Set(['read_file', 'terminal', 'execute_code', 'code_execution', 'write_file', 'patch', 'skill_view', 'skills_list', 'web_search', 'web_extract', 'delegate_task', 'todo', 'drama_rules_read', 'drama_agent_document', 'drama_project_create', 'drama_project_status', 'drama_material_import', 'drama_submit', 'drama_confirm', 'drama_review', 'drama_export'])
+const publicTools = new Set(['read_file', 'terminal', 'execute_code', 'code_execution', 'write_file', 'patch', 'skill_view', 'skills_list', 'web_search', 'web_extract', 'delegate_task', 'todo', 'drama_rules_read', 'drama_agent_document', 'drama_project_create', 'drama_project_status', 'drama_material_import', 'drama_submit', 'drama_confirm', 'drama_review', 'drama_export', 'drama_story_bible', 'drama_requirements'])
 publicTools.add('image_generate')
 const safeName = value => publicTools.has(value) ? value : 'creative_task'
 const publicArguments = (name, args) => {
@@ -124,12 +128,13 @@ const publicArguments = (name, args) => {
   const enums = {
     drama_submit: { kind: ['source', 'core', 'candidates', 'outline_batch', 'script_batch', 'accept_batch', 'restart'] },
     drama_confirm: { gate: ['core', 'plan'] },
+    drama_story_bible: { action: ['list', 'read', 'search', 'history', 'record', 'propose'] },
     drama_rules_read: { stage: ['all', 'M0', 'M1', 'M2A', 'M2B', 'M3', 'M4', 'M5', 'batch'] }
   }
   for (const [key, values] of Object.entries(enums[name] || {})) if (values.includes(data[key])) result[key] = data[key]
   return result
 }
-const info = value => pick(value, ['model', 'provider', 'running', 'turn_started_at', 'lazy', 'reasoning_effort', 'reasoning_effort_wire'])
+const info = value => pick(value, ['model', 'provider', 'running', 'turn_started_at', 'lazy', 'reasoning_effort', 'reasoning_effort_wire', 'model_selection_required', 'model_selection_error'])
 async function readReceipt(response) {
   const limit = 16 * 1024 * 1024
   if (!response.ok || !response.body || Number(response.headers.get('content-length')) > limit) { await response.body?.cancel(); return null }
@@ -197,10 +202,11 @@ export class StudioPresentation {
     const data = object(value)
     if (!data || typeof data.id !== 'string') return undefined
     const result = pick(data, ['id', 'title', 'stage'])
-    if (['oa6-1', 'gm3-1', 'gr4-7', 'independent-skills'].includes(data.agent_id)) result.agent_id = data.agent_id
+    if (documentOwners.has(data.agent_id)) result.agent_id = data.agent_id
     if (Array.isArray(data.artifacts)) result.artifacts = data.artifacts.map(row => ({
-      ...pick(row, ['id', 'name', 'content', 'kind', 'status', 'export_status', 'source_message_id', 'source_response_sha256']),
+      ...pick(row, ['id', 'name', 'content', 'kind', 'status', 'export_status', 'source_message_id', 'source_response_sha256', 'previous_document_id', 'previous_content_sha256']),
       ...documentEvidence(row),
+      ...(typeof row?.content === 'string' ? { content_sha256: createHash('sha256').update(row.content).digest('hex') } : {}),
       ...(row?.export_error ? { export_error: 'Word 文件生成失败，正文已保存，可稍后重试导出。' } : {})
     }))
     for (const key of ['source', 'core', 'plan']) if (object(data[key])) result[key] = pick(data[key], ['content'])
@@ -209,7 +215,7 @@ export class StudioPresentation {
     for (const row of array(data.exports)) {
       let handle
       try { handle = await this.files.registerAs(viewer, sourceUser, row?.path ?? row?.destination, 'export') } catch (error) { if (!error.status) throw error }
-      if (handle) result.exports.push({ ...pick(row, ['name', 'artifact_name', 'artifact_id', 'format', 'kind', 'source_kind', 'status', 'content_verified', 'layout_verified', 'content_sha256', 'sha256', 'source_message_id', 'source_response_sha256']), ...documentEvidence(row), path: handle })
+      if (handle) result.exports.push({ ...pick(row, ['name', 'artifact_name', 'artifact_id', 'format', 'kind', 'source_kind', 'status', 'content_verified', 'layout_verified', 'content_sha256', 'sha256', 'source_message_id', 'source_response_sha256', 'previous_document_id', 'previous_content_sha256']), ...documentEvidence(row), path: handle })
     }
     return result
   }
@@ -251,6 +257,13 @@ export class StudioPresentation {
       let handle
       try { handle = await this.files.registerAs(viewer, sourceUser, receipt.path ?? receipt.destination, 'export') } catch (error) { if (!error.status) throw error }
       if (handle) result.receipt = { ...pick(receipt, ['name', 'format', 'artifact_id', 'artifact_name', 'kind', 'source_kind', 'status', 'content_verified', 'layout_verified', 'content_sha256', 'sha256', 'source_message_id', 'source_response_sha256']), ...documentEvidence(receipt), path: handle }
+    }
+    // 稿件核验结论只带公开部分：是否通过、剩余返修次数、问题类型与集号/差额，界面据此在正文下方写明 稿件核验发现了什么。
+    const quality = object(data?.quality_check)
+    if (quality && typeof quality.status === 'string') result.quality_check = {
+      ...pick(quality, ['status', 'revisions_remaining', 'document_id', 'content_sha256', 'previous_document_id', 'previous_content_sha256']),
+      issues: (Array.isArray(quality.issues) ? quality.issues : []).slice(0, 12)
+        .flatMap(issue => object(issue) && typeof issue.code === 'string' ? [pick(issue, ['code', 'episode', 'difference'])] : [])
     }
     const project = await this.projectAs(viewer, sourceUser, data?.project)
     if (project) { result.project = project; if (!failed) result.summary = result.receipt ? '稿件已保存，Word 文件可下载。' : '项目阶段已更新。' }
@@ -352,9 +365,15 @@ export class StudioPresentation {
     const state = sessionId && this.backend.runtimeStates.get(sessionId)
     const model = value?.model || state?.model
     const provider = value?.provider || state?.provider
-    const source = array(catalog?.providers).find(row => row.slug === provider || array(row.aliases).includes(provider))
+    const normalizeProvider = candidate => String(candidate || '').replace(/^custom:/, '')
+    const normalizedProvider = normalizeProvider(provider)
+    const source = array(catalog?.providers).find(row => row.slug === provider
+      || normalizeProvider(row.slug) === normalizedProvider
+      || array(row.aliases).some(alias => alias === provider || normalizeProvider(alias) === normalizedProvider))
     const projected = this.backend.modelNames.info(user, result, catalog, slot)
-    if (model && projected.model) projected.model_capabilities = { model: projected.model, capabilities: safeCapabilities(source?.capabilities, [model])[model] }
+    if (model && projected.model && source?.capabilities && Object.hasOwn(source.capabilities, model)) {
+      projected.model_capabilities = { model: projected.model, capabilities: safeCapabilities(source.capabilities, [model])[model] }
+    }
     return projected
   }
   async catalog(user, value) {
@@ -433,6 +452,11 @@ export class StudioPresentation {
       return { ...frame, result: await this.catalog(user, value) }
     }
     const value = frame.result || {}
+    if (call.method === 'session.active_list' && frame.result) return { ...frame, result: { sessions: array(value.sessions)
+      .filter(row => typeof row?.id === 'string' && this.backend.runtimeOwners.get(row.id) === user.id
+        && typeof this.backend.runtimeStates.get(row.id)?.storedSessionId === 'string'
+        && ['idle', 'starting', 'waiting', 'working', 'streaming', 'resuming'].includes(row.status))
+      .map(row => ({ id: row.id, session_key: this.backend.runtimeStates.get(row.id).storedSessionId, status: row.status })) } }
     const openRequests = () => array(value.open_requests).map(row => onRequest(row)).filter(Boolean)
     if (!isEmployee(user)) {
       const result = { ...value }

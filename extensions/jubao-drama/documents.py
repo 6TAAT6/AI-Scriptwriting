@@ -14,7 +14,8 @@ from tempfile import TemporaryFile
 import xml.etree.ElementTree as ET
 from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 
-from .document_evidence import receipt_scopes, text_statistics
+from .document_evidence import _EPISODE_HEADING, receipt_scopes, text_statistics
+from .manuscript_text import visible_manuscript
 from .security import data_path, read_document_bytes, restricted, write_document_bytes
 
 MAX_FILE_BYTES = 20 * 1024 * 1024
@@ -43,7 +44,7 @@ def _path(value, suffixes) -> Path:
     if ".." in candidate.parts or "\x00" in str(candidate):
         raise ValueError("文件路径不能包含上级目录或空字符")
     if candidate.suffix.lower() not in suffixes:
-        raise ValueError("文件类型不支持，请使用 TXT、MD、DOCX、XLSX、CSV 或 PDF")
+        raise ValueError("文件类型不支持，请使用 TXT、MD、DOCX、XLSX、XLS、XLSM、CSV 或 PDF")
     if restricted():
         return data_path(candidate)[1]
     return candidate.absolute()
@@ -96,22 +97,67 @@ def _xml(archive: ZipFile, name: str) -> ET.Element:
         raise ValueError("Office 文档缺少必要内容或 XML 损坏") from exc
 
 
+_MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+# 段落文字只取正文本身：文本框另起段落，兼容旧版本的 Fallback 副本与旧版 VML 文本框不再重复读取。
+_SKIP_IN_PARAGRAPH = {f"{{{_MC}}}Fallback", f"{{{W}}}txbxContent"}
+
+
+def _paragraph_text(paragraph) -> str:
+    parts = []
+
+    def walk(node):
+        for child in node:
+            if child.tag in _SKIP_IN_PARAGRAPH:
+                continue
+            if child.tag == f"{{{W}}}t":
+                parts.append(child.text or "")
+            elif child.tag == f"{{{W}}}tab":
+                parts.append("\t")
+            elif child.tag in (f"{{{W}}}br", f"{{{W}}}cr"):
+                parts.append("\n")
+            walk(child)
+    walk(paragraph)
+    return "".join(parts)
+
+
+def _text_boxes(paragraph):
+    """段落内文本框的正文容器；AlternateContent 只取 Choice，避免与 Fallback 重复。"""
+    found = []
+
+    def walk(node):
+        for child in node:
+            if child.tag == f"{{{_MC}}}Fallback":
+                continue
+            if child.tag == f"{{{W}}}txbxContent":
+                found.append(child)
+                continue
+            walk(child)
+    walk(paragraph)
+    return found
+
+
+def _docx_blocks(container) -> list[str]:
+    paragraphs = []
+    for child in container:
+        if child.tag == f"{{{W}}}p":
+            paragraphs.append(_paragraph_text(child))
+            for box in _text_boxes(child):
+                paragraphs.extend(_docx_blocks(box))
+        elif child.tag == f"{{{_MC}}}AlternateContent":
+            choice = child.find(f"{{{_MC}}}Choice")
+            if choice is not None:
+                paragraphs.extend(_docx_blocks(choice))
+        elif child.tag != f"{{{W}}}sectPr":
+            # 表格、行、单元格、内容控件等块级容器按原有顺序展开，单元格内段落各占一行。
+            paragraphs.extend(_docx_blocks(child))
+    return paragraphs
+
+
 def _docx_paragraphs(archive: ZipFile) -> list[str]:
     body = _xml(archive, "word/document.xml").find(f"{{{W}}}body")
     if body is None:
         raise ValueError("Word 文档缺少正文")
-    paragraphs = []
-    for paragraph in body.iter(f"{{{W}}}p"):
-        parts = []
-        for node in paragraph.iter():
-            if node.tag == f"{{{W}}}t":
-                parts.append(node.text or "")
-            elif node.tag == f"{{{W}}}tab":
-                parts.append("\t")
-            elif node.tag in (f"{{{W}}}br", f"{{{W}}}cr"):
-                parts.append("\n")
-        paragraphs.append("".join(parts))
-    return paragraphs
+    return _docx_blocks(body)
 
 
 def _column(reference: str, fallback: int) -> int:
@@ -128,21 +174,32 @@ def _column(reference: str, fallback: int) -> int:
     return number - 1
 
 
-def _xlsx_sheets(archive: ZipFile) -> list[tuple[str, list[list[str]]]]:
+def _xlsx_sheets(archive: ZipFile, selected_sheet=None) -> list[tuple[str, list[list[str]]]]:
     workbook = _xml(archive, "xl/workbook.xml")
+    namespaces = {
+        f"{{{S}}}workbook": (S, R),
+        "{http://purl.oclc.org/ooxml/spreadsheetml/main}workbook": (
+            "http://purl.oclc.org/ooxml/spreadsheetml/main",
+            "http://purl.oclc.org/ooxml/officeDocument/relationships",
+        ),
+    }
+    if workbook.tag not in namespaces:
+        raise ValueError("工作簿格式无法识别")
+    sheet_ns, relationship_ns = namespaces[workbook.tag]
     relationships = _xml(archive, "xl/_rels/workbook.xml.rels")
     targets = {relation.get("Id"): relation for relation in relationships}
     shared = []
     if "xl/sharedStrings.xml" in archive.namelist():
         shared = [
-            "".join(part.text or "" for part in node.iter(f"{{{S}}}t"))
-            for node in _xml(archive, "xl/sharedStrings.xml").findall(f"{{{S}}}si")
+            "".join(part.text or "" for part in node.iter(f"{{{sheet_ns}}}t"))
+            for node in _xml(archive, "xl/sharedStrings.xml").findall(f"{{{sheet_ns}}}si")
         ]
     result, text_length = [], 0
-    for sheet in workbook.findall(f"{{{S}}}sheets/{{{S}}}sheet"):
-        if sheet.get("state", "visible") != "visible":
+    for sheet in workbook.findall(f"{{{sheet_ns}}}sheets/{{{sheet_ns}}}sheet"):
+        if (selected_sheet is None and sheet.get("state", "visible") != "visible"
+                or selected_sheet is not None and sheet.get("name") != selected_sheet):
             continue
-        relation = targets.get(sheet.get(f"{{{R}}}id"))
+        relation = targets.get(sheet.get(f"{{{relationship_ns}}}id"))
         if relation is None or relation.get("TargetMode") == "External":
             raise ValueError("工作表关系缺失或指向外部文件")
         target = relation.get("Target", "")
@@ -152,16 +209,17 @@ def _xlsx_sheets(archive: ZipFile) -> list[tuple[str, list[list[str]]]]:
         if not member.startswith("xl/"):
             raise ValueError("工作表关系超出文档范围")
         rows = []
-        for row in _xml(archive, member).findall(f"{{{S}}}sheetData/{{{S}}}row"):
+        for row in _xml(archive, member).findall(f"{{{sheet_ns}}}sheetData/{{{sheet_ns}}}row"):
             cells, next_column = {}, 0
-            for cell in row.findall(f"{{{S}}}c"):
+            for cell in row.findall(f"{{{sheet_ns}}}c"):
                 column = _column(cell.get("r", ""), next_column)
                 if column in cells:
                     raise ValueError("工作表含重复单元格")
                 kind = cell.get("t")
-                value = cell.find(f"{{{S}}}v")
+                value = cell.find(f"{{{sheet_ns}}}v")
+                formula = cell.find(f"{{{sheet_ns}}}f")
                 if kind == "inlineStr":
-                    value = "".join(node.text or "" for node in cell.iter(f"{{{S}}}t"))
+                    value = "".join(node.text or "" for node in cell.iter(f"{{{sheet_ns}}}t"))
                 elif kind == "s":
                     try:
                         index = int(value.text)
@@ -170,8 +228,9 @@ def _xlsx_sheets(archive: ZipFile) -> list[tuple[str, list[list[str]]]]:
                         value = shared[index]
                     except (IndexError, ValueError, AttributeError) as exc:
                         raise ValueError("共享字符串引用无效") from exc
-                elif cell.find(f"{{{S}}}f") is not None and value is None:
-                    raise ValueError("工作表公式没有缓存结果，请先用 Excel 计算并保存")
+                elif formula is not None and (value is None or not value.text and kind != "str"):
+                    # 不执行公式，也不把未计算的单元格伪装成空白或阻断其余正文。
+                    value = "[公式未计算" + ("：=" + formula.text if formula.text else "") + "]"
                 else:
                     value = "" if value is None else value.text or ""
                 cells[column] = value
@@ -185,6 +244,65 @@ def _xlsx_sheets(archive: ZipFile) -> list[tuple[str, list[list[str]]]]:
             rows.append(values)
         result.append((sheet.get("name", "未命名工作表"), rows))
     return result
+
+
+def _xls_sheets(data: bytes, selected_sheet=None) -> list[tuple[str, list[list[str]]]]:
+    try:
+        import xlrd
+    except ImportError as exc:
+        raise ValueError("当前创作服务缺少 XLS 读取组件，请联系管理员修复服务依赖") from exc
+    from xlrd.compdoc import CompDocError
+
+    result, text_length = [], 0
+    try:
+        # xlrd 仅解析 BIFF 数据，不启动 Office、不执行宏或外部链接。
+        with xlrd.open_workbook(file_contents=data, on_demand=True, ragged_rows=True) as workbook:
+            formatters = {
+                xlrd.XL_CELL_NUMBER: lambda value: str(int(value)) if value.is_integer() else str(value),
+                xlrd.XL_CELL_DATE: lambda value: xlrd.xldate_as_datetime(value, workbook.datemode).isoformat(sep=" "),
+                xlrd.XL_CELL_BOOLEAN: lambda value: "TRUE" if value else "FALSE",
+                xlrd.XL_CELL_ERROR: lambda value: xlrd.error_text_from_code.get(value, "[单元格错误]"),
+            }
+            for index in range(workbook.nsheets):
+                sheet = workbook.sheet_by_index(index)
+                if (selected_sheet is None and sheet.visibility
+                        or selected_sheet is not None and sheet.name != selected_sheet):
+                    workbook.unload_sheet(index)
+                    continue
+                rows = []
+                for row_index in range(sheet.nrows):
+                    values = [formatters.get(cell.ctype, str)(cell.value) for cell in sheet.row(row_index)]
+                    text_length += sum(map(len, values)) + len(values)
+                    if text_length > MAX_TEXT_CHARACTERS:
+                        raise ValueError("工作表正文超过字符上限")
+                    rows.append(values)
+                result.append((sheet.name, rows))
+                workbook.unload_sheet(index)
+    except (xlrd.XLRDError, CompDocError) as exc:
+        raise ValueError("XLS 文件无法解析，可能已加密、损坏或不是有效的 Excel 工作簿") from exc
+    return result
+
+
+def _decode_text(data: bytes, label: str) -> str:
+    # UTF-16 必须带 BOM；无 BOM 先尝试 UTF-8，再兼容中文 Windows 与 Excel 常用的 GBK/GB18030。
+    encodings = ("utf-16",) if data.startswith((b"\xff\xfe", b"\xfe\xff")) else ("utf-8-sig", "gb18030")
+    for encoding in encodings:
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError(f"{label}编码无法识别，请另存为 UTF-8 后重新上传")
+
+
+def _csv_text(data: bytes) -> str:
+    return _decode_text(data, "CSV ")
+
+
+def _spreadsheet_text(sheets) -> str:
+    return "\n\n".join(
+        "【" + name + "】\n" + "\n".join("\t".join(row) for row in rows)
+        for name, rows in sheets
+    )
 
 
 def _pdf_text(data: bytes) -> str:
@@ -218,30 +336,46 @@ def _pdf_text(data: bytes) -> str:
     return text.replace("\f", "\n")
 
 
-def read_material(path) -> dict:
+def read_material(path, *, sheet=None, file_sha256=None) -> dict:
     """读取用户明确提供的本机材料，记录文件和解析文本的独立摘要。"""
-    source = _path(path, {".txt", ".md", ".docx", ".xlsx", ".csv", ".pdf"})
+    source = _path(path, {".txt", ".md", ".docx", ".xlsx", ".xls", ".xlsm", ".csv", ".pdf"})
     data = read_document_bytes(source, MAX_FILE_BYTES)
     if not data or len(data) > MAX_FILE_BYTES:
         raise ValueError("材料不能为空且每个文件最多 20 MB")
     extension = source.suffix.lower()[1:]
-    if extension in {"txt", "md", "csv"}:
-        try:
-            text = data.decode("utf-8-sig")
-        except UnicodeDecodeError as exc:
-            raise ValueError("文本材料须使用 UTF-8 编码") from exc
-    elif extension == "pdf":
-        text = _pdf_text(data)
+    if file_sha256 is not None and file_sha256 != _sha(data):
+        raise ValueError('工作簿内容已变化，请重新确认文件版本后读取，不能拼接不同版本')
+    metadata = {}
+    if extension in {'xls', 'xlsx', 'xlsm'}:
+        from .material_cells import _choose_sheet, workbook_sheets
+        sheets = workbook_sheets(data, extension)
+        if sheet is not None:
+            _choose_sheet([item['name'] for item in sheets], sheet)
+        read_sheets = [item['name'] for item in sheets
+                       if item['name'] == sheet or sheet is None and item['visibility'] == 'visible']
+        unread = [item['name'] for item in sheets if item['name'] not in read_sheets]
+        metadata = {'sheets': sheets, 'available_sheets': [item['name'] for item in sheets],
+                    'read_sheets': read_sheets, 'unread_sheets': unread, 'workbook_coverage_complete': not unread,
+                    'file_sha256': _sha(data)}
+        if sheet is not None:
+            metadata.update(sheet=sheet, sheet_visibility=next(item['visibility'] for item in sheets if item['name'] == sheet))
+    elif sheet is not None:
+        from .document_parameters import UnsupportedSheetError
+        raise UnsupportedSheetError('当前文件不是 Excel 工作簿；删除 sheet 参数后，使用同一资料读取工具继续读取正文。')
+    reader = {"csv": _csv_text, "xls": lambda value: _spreadsheet_text(_xls_sheets(value, sheet)), "pdf": _pdf_text}.get(extension)
+    if extension in {"txt", "md"}:
+        # Windows 记事本常见 GBK/GB18030 编码，与 CSV 使用同一套识别顺序。
+        text = _decode_text(data, "文本")
+    elif reader is not None:
+        text = reader(data)
     else:
         with _archive(data) as archive:
             if extension == "docx":
                 text = "\n".join(_docx_paragraphs(archive))
             else:
-                text = "\n\n".join(
-                    "【" + name + "】\n" + "\n".join("\t".join(row) for row in rows)
-                    for name, rows in _xlsx_sheets(archive)
-                )
-    text = _text(text, MAX_TEXT_CHARACTERS)
+                text = _spreadsheet_text(_xlsx_sheets(archive, sheet))
+    # 全部工作表隐藏时仍返回真实目录，允许按表名继续读取，不能误报文件为空。
+    text = _text(text, MAX_TEXT_CHARACTERS) if text.strip() or not metadata.get('sheets') else ''
     return {
         "path": str(source),
         "name": source.name,
@@ -251,6 +385,7 @@ def read_material(path) -> dict:
         "content_sha256": _sha(text.encode()),
         "characters": len(text),
         "size_bytes": len(data),
+        **metadata,
     }
 
 
@@ -508,19 +643,34 @@ def _word_numbering() -> bytes:
     return _bytes(numbering)
 
 
+# 小说章标题（“第一章 标题”）在 Word 里加粗并保持顶格；正文行以全角空格开头，不会被误认成标题。
+_NOVEL_CHAPTER = re.compile(r"^第[零〇一二三四五六七八九十百千两\d]+[章回](?:[ \t　].*)?$")
+_NOVEL_MARKDOWN = re.compile(r"(?m)^[ \t]{0,3}(?:#{1,6}[ \t]|[-*+][ \t]|\|)|\*\*[^*\n]+\*\*")
+
+
 def export_document(text, destination, *, document_kind="script") -> dict:
     """生成可编辑 Word；正文和 Markdown 文档都保留可回读的实际段落。"""
     source = _text(text)
-    if document_kind not in {"script", "outline", "document"}:
-        raise ValueError("document_kind 必须是 script、outline 或 document")
+    if document_kind not in {"script", "outline", "document", "novel"}:
+        raise ValueError("document_kind 必须是 script、outline、document 或 novel")
+    # 来源摘要仍锁定原稿；HTML只是前台排版，Word写入与核验相同的可见正文。
+    visible_source = _text(visible_manuscript(source)[0])
     entries = []
-    plain_content = source
+    plain_content = visible_source
     if document_kind == "script":
-        lines = [line for line in source.split("\n") if line.strip()]
+        lines = [line for line in visible_source.split("\n") if line.strip()]
         entries = [{"kind": "paragraph", "text": line} for line in lines]
         plain_content = "\n".join(lines)
+    elif document_kind == "novel":
+        # 小说正文逐段原样写入：段首两个全角空格是番茄等平台要求的排版，Markdown 转换会把它当空白去掉。
+        lines = [line.rstrip() for line in visible_source.split("\n") if line.strip()]
+        entries = [{"kind": "paragraph", "text": line, "chapter": bool(_NOVEL_CHAPTER.match(line))} for line in lines]
+        plain_content = "\n".join(lines)
+        if _NOVEL_MARKDOWN.search(visible_source):
+            # 其他 Agent 用 Markdown 写的小说稿（正式版已有七十多份）照旧转换，Word 里不出现字面的 ## 和 **。
+            entries, plain_content = _markdown_rows(visible_source)
     else:
-        entries, plain_content = _markdown_rows(source)
+        entries, plain_content = _markdown_rows(visible_source)
     document = ET.Element(f"{{{W}}}document")
     body = _element(document, W, "body")
     visible_index = 0
@@ -532,14 +682,15 @@ def export_document(text, destination, *, document_kind="script") -> dict:
         if document_kind == "script" and visible_index:
             _word_paragraph(body, "", gap=True, heading=previous_heading)
         value = entry["text"]
-        title = bool(re.fullmatch(r"第.+集", value)) or entry.get("level") == 1
-        scene = bool(re.match(r"^\d+[-—]\d+场?\s", value))
-        person = bool(re.match(r"^(?:出场)?人物[:：]", value))
+        title = bool(_EPISODE_HEADING.fullmatch(value)) or entry.get("level") == 1
+        prose = document_kind == "novel"
+        scene = not prose and bool(re.match(r"^\d+[-—.]\d+(?:场)?[.．、]?\s", value))
+        person = not prose and bool(re.match(r"^(?:出场|本集)?人物[:：]", value))
         _word_paragraph(
             body,
             value,
             title=title,
-            heading=scene or person or entry.get("level", 0) > 1,
+            heading=scene or person or entry.get("level", 0) > 1 or entry.get("chapter", False),
             list_item=entry.get("list", False),
         )
         previous_heading = title or scene or person

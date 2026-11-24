@@ -13,7 +13,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 test('平台保存新接入后刷新真实账号配置，保留工作进程及账号代理凭证', { skip: process.platform !== 'darwin' }, async t => {
   const home = await realpath(await mkdtemp(path.join(tmpdir(), 'studio-model-refresh-')))
   // 临时账号只隔离业务数据；沿用 PM 已预装的测试环境，避免每次测试都安装完整依赖。
-  const python = execFileSync(path.join(repoRoot, '.venv/bin/python'), ['-B', '-c',
+  const python = process.env.HERMES_PYTHON || execFileSync(path.join(repoRoot, '.venv/bin/python'), ['-B', '-c',
     'from pathlib import Path; from pm.environments import activation_environment; print(activation_environment(Path.cwd())["__HERMES_TEST_PYTHON"])'],
     { cwd: repoRoot, encoding: 'utf8', timeout: 10_000 }).trim()
   const nativeRuntime = { python, pythonPath: repoRoot, pythonPaths: [repoRoot], runtimeDir: path.join(repoRoot, '.hermes-runtime') }

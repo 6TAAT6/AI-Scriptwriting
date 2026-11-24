@@ -2,11 +2,11 @@ import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import { realpath } from 'node:fs/promises'
 import { fail } from './accounts.mjs'
+import { isSupportedFile as supported } from '../shared/attachments.mjs'
 
 export const isEmployee = user => user.role !== 'super_admin'
 export const FILE_REFERENCE = /@file:(?:`([^`]+)`|"([^"]+)"|'([^']+)'|([^\s]+))/g
 const quote = value => '`' + value + '`'
-const supported = value => /\.(txt|md|docx|xlsx|csv|pdf|png|jpg|jpeg|webp)$/i.test(value)
 
 export function validateEmployeePrompt(text) {
   // 与服务端输入清理一致地识别粘贴包装；只检查行首命令，不阻断正文里的斜线。

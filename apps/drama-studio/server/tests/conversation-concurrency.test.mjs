@@ -1,3 +1,4 @@
+import { fixtureModelEndpoints, fixtureModelCatalog } from './model-fixtures.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
@@ -14,12 +15,13 @@ test('所有角色均能同时启动十个独立项目对话，完成回执只�
   const directory = await mkdtemp(path.join(tmpdir(), 'studio-concurrency-'))
   const calls = [], clients = []
   let nextSession = 0
-  const native = createServer((_req, res) => { res.writeHead(404); res.end('{}') })
+  const native = createServer((_req, res) => { if (fixtureModelEndpoints(_req,res)) return; res.writeHead(404); res.end('{}') })
   const wss = new WebSocketServer({ server: native })
   wss.on('connection', socket => socket.on('message', raw => {
     const frame = JSON.parse(raw), params = frame.params || {}
     let result = {}
-    if (frame.method === 'session.create') {
+    if(frame.method==='model.options') result=fixtureModelCatalog(params.profile)
+    else if (frame.method === 'session.create') {
       const id = `live-${++nextSession}`
       result = { session_id: id, stored_session_id: `stored-${id}`, message_count: 0, messages: [], info: {} }
     } else if (frame.method === 'prompt.submit') {
@@ -68,6 +70,7 @@ test('所有角色均能同时启动十个独立项目对话，完成回执只�
       function receive(raw) { const frame = JSON.parse(raw); if (frame.id !== id) return; clearTimeout(timer); socket.off('message', receive); resolve(frame) }
       socket.on('message', receive); socket.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }))
     })
+    assert.equal((await rpc('model.options')).error,undefined)
     const sessions = []
     for (let i = 0; i < 10; i++) {
       const session = (await rpc('session.create')).result; sessions.push(session)

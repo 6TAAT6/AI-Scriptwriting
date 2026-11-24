@@ -13,30 +13,17 @@ def _agent_profiles():
     return module
 
 
-def test_renamed_agents_preserve_registered_and_historical_skill_identity(tmp_path, monkeypatch):
+def test_agent_catalog_uses_the_three_user_facing_names():
     module = _agent_profiles()
-    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
 
-    home = tmp_path / "renamed-agents"
-    home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
-    token = set_hermes_home_override(home)
-    try:
-        for agent_id, current, historical in (
-            ("gm3-1", "巨豹 Agent-适配巨豹满血版 V1.1", "巨豹 Agent-适配 GM3.1 版本"),
-            ("oa6-1", "巨豹 Agent-适配巨豹测试版 V2.1", "巨豹 Agent-适配 OA6.1 版本"),
-            ("gr4-7", "巨豹 Agent-适配巨豹试用版 V3.0", "巨豹 Agent-适配 GR4.7 版本"),
-        ):
-            module.activate_agent(agent_id, agent_id)
-            for name in (current, historical, "jubao-agent-" + agent_id):
-                for namespace in ("", "jubao-drama:"):
-                    resolved = module.agent_for_skill(namespace + name)
-                    assert resolved == agent_id
-                    assert module.activate_agent(agent_id, resolved) == agent_id
-                    assert module.active_agent(agent_id) == agent_id
-            assert module.agent_for_skill("other:" + current) is None
-    finally:
-        reset_hermes_home_override(token)
+    assert [row["display_name"] for row in module.AGENT_PROFILES.values()] == [
+        "巨豹 Agent-适配 OA6.1 版本",
+        "巨豹 Agent-适配 GM3.1 版本",
+        "巨豹 Agent-适配 GR4.7 版本",
+    ]
+    assert module.agent_for_skill("jubao-drama:jubao-agent-oa6-1") == "oa6-1"
+    assert module.agent_for_skill("jubao-drama:jubao-agent-gm3-1") == "gm3-1"
+    assert module.agent_for_skill("jubao-drama:jubao-agent-gr4-7") == "gr4-7"
 
 
 def test_register_skills_exposes_every_declared_capability():

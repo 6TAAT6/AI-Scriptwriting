@@ -3,7 +3,8 @@ import { constants } from 'node:fs'
 import { open, writeFile, link, rm } from 'node:fs/promises'
 import path from 'node:path'
 
-export const activationRequired = user => ['admin', 'employee'].includes(user?.role) && !user.activated_at
+// 公司后台账号由公司统一登录和应用授权把关，不再要求激活码；激活码只用于本地账号。
+export const activationRequired = user => ['admin', 'employee'].includes(user?.role) && !user.activated_at && user.auth_source !== 'company'
 const digest = value => createHash('sha256').update(value).digest('hex')
 
 export function activationDigest(value) {

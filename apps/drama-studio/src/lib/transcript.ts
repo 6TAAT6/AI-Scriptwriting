@@ -3,7 +3,7 @@ import type { TranscriptMessage } from '../../../shared/src/gateway-contract.gen
 export type { TranscriptMessage }
 import { progressEvent, type TurnProgress } from './progress'
 import type { ToolReceipt } from './creative'
-import { activityLabel, argumentSummary, blockedResult, failedResult, resultSummary } from './activity-summary'
+import { activityDescriptor, activityLabel, argumentSummary, blockedResult, failedResult, resultSummary, revisionEvidence } from './activity-summary'
 import { historyNotice, nativeEvent, settleThinking, type NativeSubagent } from './native-activity'
 import { attachedFiles, attachedImages, attachmentText } from './attachments'
 import { isSupportedFile } from '../../shared/attachments.mjs'
@@ -19,13 +19,17 @@ export interface Activity {
   seconds?: number
   argumentSummary?: string
   resultSummary?: string
+  verb?: string
+  object?: string
   startedAt?: number
   endedAt?: number
   startTimeSource?: 'local' | 'history'
   downloads?: ToolDownload[]
+  revisionEvidence?: import('./revision-merge').RevisionEvidence
 }
 
 export interface ToolDownload {
+  documentId?: string
   path: string
   name: string
   format: string
@@ -39,11 +43,16 @@ export interface Entry {
   images?: { path: string; name: string }[]
   id: string
   role: 'user' | 'assistant' | 'activity' | 'status' | 'thinking' | 'subagent'
+  turnId?: string
   text: string
   calls: Activity[]
   pending?: boolean
   noticeKind?: string
   subagent?: NativeSubagent
+  /** 步骤组：本轮稿件写出后模型正在思考（下一步尚未开始）。 */
+  thinking?: boolean
+  /** 同一轮后面的返修稿已按集号合并进这段正文；draft 是修订前的初稿，供“查看初稿”展开。 */
+  revision?: { draft: string }
 }
 
 function generatedImage(value: unknown): string | undefined {
@@ -72,13 +81,16 @@ export function toolDownloads(value: unknown): ToolDownload[] {
     if (typeof path !== 'string' || !path.startsWith('/') || path.includes('/../') || !/\.(docx|xlsx)$/i.test(path)) continue
     const name = typeof item?.name === 'string' ? item.name : path.split(/[\\/]/).pop() || '交付文件'
     const format = typeof item?.format === 'string' ? item.format.toLowerCase() : path.split('.').pop()?.toLowerCase() || ''
-    found.set(path, { path, name, format, status: typeof item?.status === 'string' ? item.status : undefined })
+    const documentId = item?.artifact_id ?? item?.document_id
+    found.set(path, { path, name, format, status: typeof item?.status === 'string' ? item.status : undefined,
+      ...(typeof documentId === 'string' && documentId ? { documentId } : {}) })
   }
   return [...found.values()]
 }
 
 export interface Conversation {
   runtimeId: string
+  turnId?: string
   entries: Entry[]
   running: boolean
   error: string
@@ -123,11 +135,13 @@ export function restoreToolReceipts(entries: Entry[], receipts: ToolReceipt[]): 
     const content = byId.get(call.id)
     const downloads = toolDownloads(content)
     const withDownloads = downloads.length ? { downloads } : {}
+    const evidence = revisionEvidence(content)
+    const withEvidence = evidence ? { revisionEvidence: evidence } : {}
     // 原生桥接历史的名称可能是 tool_call；按同一调用的正式回执恢复图片。
     const image = generatedImage(content)
-    if (image) return { ...call, ...withDownloads, name: 'image_generate', label: activityLabel('image_generate'), image, state: 'complete' as const, resultSummary: '图片已生成，可查看和下载。' }
-    if (!['unknown', 'interrupted'].includes(call.state)) return Object.keys(withDownloads).length ? { ...call, ...withDownloads } : call
-    return { ...call, ...withDownloads, image, resultSummary: resultSummary(content), state: blockedResult(content) ? 'blocked' as const : failedResult(content) ? 'error' as const : 'complete' as const }
+    if (image) return { ...call, ...withDownloads, ...withEvidence, name: 'image_generate', label: activityLabel('image_generate'), verb: '生成图片', object: undefined, image, state: 'complete' as const, resultSummary: '图片已生成，可查看和下载。' }
+    if (!['unknown', 'interrupted'].includes(call.state)) return Object.keys(withDownloads).length || Object.keys(withEvidence).length ? { ...call, ...withDownloads, ...withEvidence } : call
+    return { ...call, ...withDownloads, ...withEvidence, image, resultSummary: resultSummary(content), state: blockedResult(content) ? 'blocked' as const : failedResult(content) ? 'error' as const : 'complete' as const }
   }) }))
 }
 
@@ -141,6 +155,7 @@ function appendActivity(entries: Entry[], call: Activity): Entry[] {
 
 export function historyEntries(messages: TranscriptMessage[]): Entry[] {
   let selection: CapabilitySelection | undefined
+  let turnId = 'history-start'
   return messages.reduce<Entry[]>((entries, message, index) => {
     if (message.display_kind === 'hidden') return entries
     const id = String(message.row_id ?? `history-${index}`)
@@ -151,14 +166,17 @@ export function historyEntries(messages: TranscriptMessage[]): Entry[] {
       const name = message.name ?? 'tool'
       return appendActivity(entries, {
         id: message.tool_call_id ?? id, name, label: activityLabel(name),
-        argumentSummary: argumentSummary(name, message.args, message.context), image: name === 'image_generate' ? generatedImage(message.content) : undefined,
+        argumentSummary: argumentSummary(name, message.args, message.context), ...activityDescriptor(name, message.args, message.context),
+        image: name === 'image_generate' ? generatedImage(message.content) : undefined,
         downloads: toolDownloads(message.content),
+        revisionEvidence: revisionEvidence(message.content),
         resultSummary: resultSummary(message.content, message.summary),
         state: message.content == null ? 'unknown' : blockedResult(message.content) ? 'blocked' : failedResult(message.content) ? 'error' : 'complete'
       })
     }
     if (message.role !== 'user' && message.role !== 'assistant') return entries
     if (message.role === 'user' && raw.startsWith('[STILL IN PROGRESS — this is the active request, restated after the compaction boundary')) return entries
+    if (message.role === 'user') turnId = id
     const text = message.role === 'user' ? userDisplayText(raw) : publicRuntimeFailure(raw)
     const images = message.role === 'user' ? attachedImages(raw) : []
     const attachments = message.role === 'user' ? attachedFiles(raw) : []
@@ -166,12 +184,12 @@ export function historyEntries(messages: TranscriptMessage[]): Entry[] {
     const capabilities = message.role === 'user' ? savedCapabilitySelection(raw, selection) ?? selectionAfter(selection ?? { skills: [] }, raw, commands) : undefined
     if (capabilities) selection = capabilities
     if (!text.trim() && !images.length && !attachments.length && !commands.length) return entries
-    return [...entries, { id, role: message.role, text, calls: [], ...(capabilities ? { capabilities, capabilityCommands: commands } : {}), ...(images.length ? { images } : {}), ...(attachments.length ? { attachments } : {}) }]
+    return [...entries, { id, role: message.role, turnId, text, calls: [], ...(capabilities ? { capabilities, capabilityCommands: commands } : {}), ...(images.length ? { images } : {}), ...(attachments.length ? { attachments } : {}) }]
   }, [])
 }
 
 function assistantText(state: Conversation, text: string, append: boolean, pending: boolean): Conversation {
-  const index = state.entries.findLastIndex(row => row.role === 'assistant' && row.pending)
+  const index = state.entries.findLastIndex(row => row.role === 'assistant' && row.pending && row.turnId === state.turnId)
   const last = state.entries[index]
   if (last) {
     return { ...state, entries: state.entries.map((row, position) => position === index ? {
@@ -180,7 +198,7 @@ function assistantText(state: Conversation, text: string, append: boolean, pendi
   }
   if (!text) return state
   return { ...state, entries: [...state.entries, {
-    id: `message-${randomId()}`, role: 'assistant', text, calls: [], pending
+    id: `message-${randomId()}`, role: 'assistant', turnId: state.turnId, text, calls: [], pending
   }] }
 }
 
@@ -200,7 +218,7 @@ function settleEntries(entries: Entry[], state: 'unknown' | 'interrupted' = 'unk
 }
 
 const handlers: Record<string, (state: Conversation, payload: Record<string, unknown>, now: number, replayed?: boolean) => Conversation> = {
-  'message.start': state => ({ ...state, running: true, error: '' }),
+  'message.start': state => ({ ...state, turnId: randomId(), running: true, error: '' }),
   'message.delta': (state, payload) => assistantText(state, String(payload.text ?? ''), true, true),
   'message.interim': (state, payload) => {
     const text = String(payload.text ?? '')
@@ -224,7 +242,7 @@ const handlers: Record<string, (state: Conversation, payload: Record<string, unk
     return { ...state, entries: appendActivity(sealed, {
       id: String(payload.tool_id), name, label: activityLabel(name),
       state: 'running',
-      argumentSummary: argumentSummary(name, payload.args, payload.context),
+      argumentSummary: argumentSummary(name, payload.args, payload.context), ...activityDescriptor(name, payload.args, payload.context),
       ...(replayed ? {} : { startedAt: now, startTimeSource: 'local' as const })
     }) }
   },
@@ -239,6 +257,7 @@ const handlers: Record<string, (state: Conversation, payload: Record<string, unk
       found = true
       return { ...call, resultSummary: resultSummary(raw ?? payload.result_text, payload.summary), image: call.name === 'image_generate' ? generatedImage(raw ?? payload.result_text) : undefined,
         downloads: toolDownloads(raw ?? payload.result_text),
+        revisionEvidence: revisionEvidence(raw ?? payload.result_text),
         state: blocked ? 'blocked' as const : failed ? 'error' as const : 'complete' as const, seconds,
         endedAt: replayed ? undefined : now }
     }) }))
@@ -247,8 +266,9 @@ const handlers: Record<string, (state: Conversation, payload: Record<string, unk
     return { ...state, entries: appendActivity(entries, {
       id: String(payload.tool_id), name, label: activityLabel(name), image: name === 'image_generate' ? generatedImage(raw ?? payload.result_text) : undefined,
       state: blocked ? 'blocked' : failed ? 'error' : 'complete',
-      argumentSummary: argumentSummary(name, payload.args), resultSummary: resultSummary(raw ?? payload.result_text, payload.summary),
+      argumentSummary: argumentSummary(name, payload.args), ...activityDescriptor(name, payload.args), resultSummary: resultSummary(raw ?? payload.result_text, payload.summary),
       downloads: toolDownloads(raw ?? payload.result_text),
+      revisionEvidence: revisionEvidence(raw ?? payload.result_text),
       seconds, endedAt: replayed ? undefined : now
     }) }
   },

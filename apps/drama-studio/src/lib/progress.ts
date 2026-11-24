@@ -24,7 +24,7 @@ const epochMilliseconds = (value: unknown) => typeof value === 'number' && Numbe
 export function restoreTurn(snapshot: TurnSnapshot): TurnProgress | undefined {
   if (!(snapshot.running ?? snapshot.info?.running)) return undefined
   const startedAt = epochMilliseconds(snapshot.turn_started_at ?? snapshot.info?.turn_started_at)
-  return { startedAt, timingSource: startedAt === undefined ? 'unknown' : 'server', state: 'running', phase: 'model', status: '正在恢复本轮创作进度', steps: [] }
+  return { startedAt, timingSource: startedAt === undefined ? 'unknown' : 'server', state: 'running', phase: 'model', status: '模型正在处理请求', steps: [] }
 }
 
 const PHASE_COPY: Record<string, string> = {

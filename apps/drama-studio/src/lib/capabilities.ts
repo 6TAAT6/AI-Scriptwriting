@@ -1,10 +1,11 @@
 import catalog from '../../../../extensions/jubao-drama/capabilities.json'
 
-export interface Capability { id: string; kind: string; skill: string; display_name: string; label: string; aliases: string; description: string; legacy_names?: string[] }
+export interface Capability { id: string; kind: string; skill: string; display_name: string; label: string; aliases: string; description: string; legacy_names?: string[]; environment_badge?: string; hidden?: boolean; own_protocol?: boolean; host_tools?: string[]; protocol_rule?: string; default_script_length?: { minimum: number; maximum: number }; length_report?: string; length_revision?: boolean }
 export interface CapabilityCommand { action: string; capability: Capability }
 export interface CapabilityOperation { id: string; action: 'enable' | 'disable' }
 export interface CapabilitySelection { agent?: string; skills: string[] }
 export const CAPABILITIES: Capability[] = catalog
+export const SELECTABLE_CAPABILITIES = CAPABILITIES.filter(row => !row.hidden)
 export const SCRIPT_AGENTS = CAPABILITIES.filter(row => row.kind === 'agent')
 
 function commandAtStart(text: string): { command: CapabilityCommand; length: number } | undefined {

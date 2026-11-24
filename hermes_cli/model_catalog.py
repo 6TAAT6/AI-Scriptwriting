@@ -34,6 +34,9 @@ DEFAULT_TTL_MINUTES = 20
 # Legacy key, honoured only when the user set it explicitly; ``ttl_minutes`` is the shipped default.
 DEFAULT_TTL_HOURS = DEFAULT_TTL_MINUTES / 60.0
 DEFAULT_FETCH_TIMEOUT = 8.0
+# A failed automatic refresh must not turn an unavailable catalog into a request loop.  Explicit
+# ``force_refresh`` calls (the picker refresh action / maintenance command) still bypass this gate.
+DEFAULT_FAILURE_COOLDOWN_SECONDS = 300.0
 SUPPORTED_SCHEMA_VERSION = 1
 
 _HERMES_USER_AGENT = f"hermes-cli/{get_version_info().base_version}"
@@ -44,6 +47,7 @@ _HERMES_USER_AGENT = f"hermes-cli/{get_version_info().base_version}"
 _catalog_cache: dict[str, Any] | None = None
 _catalog_cache_source_mtime: float = 0.0
 _catalog_cache_source_path: str = ""
+_catalog_failure_until: dict[str, float] = {}
 
 
 def _load_catalog_config() -> dict[str, Any]:
@@ -183,8 +187,12 @@ def _spawn_catalog_swr_refresh(url: str) -> None:
         try:
             fetched = _fetch_manifest_with_fallback(url, DEFAULT_FETCH_TIMEOUT)
             if fetched is not None:
+                _catalog_failure_until.pop(inflight_key, None)
                 _write_disk_cache(fetched)
+            else:
+                _catalog_failure_until[inflight_key] = time.time() + DEFAULT_FAILURE_COOLDOWN_SECONDS
         except Exception:
+            _catalog_failure_until[inflight_key] = time.time() + DEFAULT_FAILURE_COOLDOWN_SECONDS
             logger.debug("catalog SWR refresh failed", exc_info=True)
         finally:
             with _catalog_swr_lock:
@@ -219,6 +227,10 @@ def get_catalog(*, force_refresh: bool = False) -> dict[str, Any]:
     ttl_seconds = max(0.0, cfg["ttl_hours"] * 3600.0)
     disk_data, disk_mtime = _read_disk_cache()
     now = time.time()
+    cache_key = str(_cache_path())
+    if not force_refresh and now < _catalog_failure_until.get(cache_key, 0.0):
+        # Keep serving a stale/empty result during the cooldown.  No DNS or HTTP work is done.
+        return _remember(disk_data, disk_mtime) if disk_data is not None else (_in_process_catalog() or {})
     disk_fresh = disk_data is not None and (now - disk_mtime) < ttl_seconds
 
     if not force_refresh and disk_data is not None:
@@ -234,13 +246,16 @@ def get_catalog(*, force_refresh: bool = False) -> dict[str, Any]:
 
     fetched = _fetch_manifest_with_fallback(cfg["url"], DEFAULT_FETCH_TIMEOUT)
     if fetched is not None:
+        _catalog_failure_until.pop(cache_key, None)
         _write_disk_cache(fetched)
         new_disk_data, new_mtime = _read_disk_cache()
         if new_disk_data is not None:
             return _remember(new_disk_data, new_mtime)
         return _remember(fetched, now)
     if disk_data is not None:
+        _catalog_failure_until[cache_key] = now + DEFAULT_FAILURE_COOLDOWN_SECONDS
         return _remember(disk_data, disk_mtime)
+    _catalog_failure_until[cache_key] = now + DEFAULT_FAILURE_COOLDOWN_SECONDS
     return {}
 
 
@@ -349,3 +364,4 @@ def reset_cache() -> None:
     _catalog_cache = None
     _catalog_cache_source_mtime = 0.0
     _catalog_cache_source_path = ""
+    _catalog_failure_until.clear()

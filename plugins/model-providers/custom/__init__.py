@@ -4,7 +4,7 @@ provider="custom" (Ollama, vLLM, llama.cpp, GLM-5.2 on ARK, …)."""
 from typing import Any
 from urllib.parse import urlparse
 
-from agent.reasoning_effort import OPENAI_COMPAT_WIRE_EFFORTS, clamp_effort
+from agent.reasoning_effort import OPENAI_COMPAT_WIRE_EFFORTS, clamp_effort, model_id_encodes_reasoning_effort
 from providers import register_provider
 from providers.base import ProviderProfile
 from utils import base_url_host_matches
@@ -51,6 +51,8 @@ class CustomProfile(ProviderProfile):
         to ``max`` — 3x the reasoning tokens and ~3x the latency of medium. The agent skips this
         default for models the catalog marks non-reasoning (``agent.reasoning_params``).
         """
+        if model_id_encodes_reasoning_effort(model):
+            return None
         return {"enabled": True, "effort": "medium"}
 
     def build_api_kwargs_extras(

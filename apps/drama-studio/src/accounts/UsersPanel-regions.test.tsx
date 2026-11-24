@@ -6,8 +6,8 @@ import { clearAuthentication, type StudioUser } from './api'
 const root: StudioUser = { id: 'region-root', username: 'root_fixture', display_name: '负责人', role: 'super_admin', enabled: true, created_at: '2026-10-01T00:00:00Z', profile: 'region-root' }
 const manager: StudioUser = { ...root, id: '18311314-470b-471f-a907-199af477d6cb', username: 'cq_manager', display_name: '重庆主编', role: 'admin', profile: 'cq-manager' }
 const chongqing: StudioUser = { ...root, id: 'd64dc6c0-9fc6-4c8f-911c-61957f4a4c63', username: 'cq_writer', display_name: '重庆编剧', role: 'employee', profile: 'cq-writer' }
-const hangzhou: StudioUser = { ...root, id: 'hz-writer', username: 'hz_writer', display_name: '杭州编剧', role: 'employee', profile: 'hz-writer' }
-const otherManager: StudioUser = { ...root, id: 'hz-manager', username: 'hz_manager', display_name: '杭州主编', role: 'admin', profile: 'hz-manager' }
+const hangzhou: StudioUser = { ...root, id: 'hz-writer', username: 'hz_writer', display_name: '横店编剧', role: 'employee', profile: 'hz-writer' }
+const otherManager: StudioUser = { ...root, id: 'hz-manager', username: 'hz_manager', display_name: '横店主编', role: 'admin', profile: 'hz-manager' }
 const users = [root, manager, chongqing, hangzhou, otherManager]
 
 beforeEach(() => {

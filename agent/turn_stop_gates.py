@@ -50,21 +50,25 @@ def _verify_on_stop_nudge(agent) -> Optional[str]:
 
 
 def _pre_verify_nudge(agent, final_response, attempt: int) -> Optional[str]:
-    """After code edits a registered ``pre_verify`` hook may keep the agent going one
-    more turn; no default continuation cost."""
+    """A registered ``pre_verify`` hook may keep the agent going one more turn: after code
+    edits, and outside coding sessions at any text stop, so content plugins can check a
+    deliverable the model wrote in its answer but never saved (``changed_paths`` is then
+    empty). No default continuation cost."""
     _edited = sorted(getattr(agent, "_turn_file_mutation_paths", set()) or [])
     try:
         from agent.verify_hooks import max_verify_nudges
         from hermes_cli.lifecycle import has_hook
         from hermes_cli.plugins import get_pre_verify_continue_message
 
-        if _edited and has_hook("pre_verify") and attempt < max_verify_nudges():
+        if has_hook("pre_verify") and attempt < max_verify_nudges():
             # Posture is fixed for the session — resolve once + cache.
             coding = getattr(agent, "_resolved_is_coding", None)
             if coding is None:
                 from agent.coding_context import is_coding_context
                 coding = bool(is_coding_context(platform=getattr(agent, "platform", "") or ""))
                 agent._resolved_is_coding = coding
+            if not _edited and coding:
+                return None
             return get_pre_verify_continue_message(
                 session_id=getattr(agent, "session_id", None) or "",
                 platform=getattr(agent, "platform", "") or "",

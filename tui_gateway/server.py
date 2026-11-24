@@ -1087,6 +1087,7 @@ def _attach_built_agent(sid: str, current: dict, agent) -> bool:
         if _sessions.get(sid) is not current:
             return False
         current["agent"] = agent
+        current.pop("model_selection_error", None)
     # A workspace move can land while construction is still in flight.
     _register_session_cwd(current)
     _session_todo_state(current)
@@ -2378,11 +2379,14 @@ def _session_info(agent, session: dict | None = None) -> dict:
     # Desktop can say "ultra sends max on this route" like `/reasoning` does instead of presenting a
     # Hermes-internal step (#61634) as a wire level the route does not have.
     reasoning_effort_wire = ""
-    if reasoning_effort and reasoning_effort != "none":
+    from agent.reasoning_effort import model_id_encodes_reasoning_effort
+    if reasoning_effort and reasoning_effort != "none" and not model_id_encodes_reasoning_effort(model):
         reasoning_effort_wire = str(clamp_effort(reasoning_effort, route_supported_efforts(pending_provider or provider, model)) or "")
     info: dict = {
         "model": model,
         "provider": pending_provider or provider,
+        "model_selection_required": bool(sess.get("model_selection_error")),
+        "model_selection_error": str(sess.get("model_selection_error") or ""),
         "reasoning_effort": reasoning_effort, "reasoning_effort_wire": reasoning_effort_wire,
         "service_tier": service_tier,
         "fast": service_tier in STATIC_TIERS and _fast_tier_applies(agent, model, pending_provider or provider,
@@ -3015,8 +3019,9 @@ def _schedule_resume_hydration(sid: str, stored_id: str, db, *, close_db: bool =
             session["resume_history_ready"].set()
             _emit("session.resume_progress", sid,
                   {"message_count": session["resume_message_count"], "phase": "history", "status": "complete"})
-            _maybe_schedule_auto_continue(sid, session, stored_id)
-            _start_agent_build(sid, session)
+            if not session.get("model_selection_error"):
+                _maybe_schedule_auto_continue(sid, session, stored_id)
+                _start_agent_build(sid, session)
         except Exception as exc:
             if _sessions.get(sid) is not session:
                 return
@@ -3114,9 +3119,13 @@ def _fallback_session_info(session: dict) -> dict:
     # so a client can clear a stale label instead of retaining it — the same contract `_lazy_session_info`
     # above already follows.
     cwd = _session_cwd(session)
+    selection_error = str(session.get("model_selection_error") or "")
+    model, provider = _live_session_identity(session) if selection_error else (_session_default_model(session), "")
     return {
         "cwd": cwd, "branch": git_probe.branch(cwd), "project": _project_info_for_cwd(cwd), "lazy": True,
-        "model": _session_default_model(session), "skills": {}, "tools": {}, "desktop_contract": DESKTOP_BACKEND_CONTRACT,
+        "model": model, **({"provider": provider} if selection_error else {}),
+        "model_selection_required": bool(selection_error), "model_selection_error": selection_error,
+        "skills": {}, "tools": {}, "desktop_contract": DESKTOP_BACKEND_CONTRACT,
     }
 
 

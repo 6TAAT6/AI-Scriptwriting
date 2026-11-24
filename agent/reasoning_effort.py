@@ -19,6 +19,9 @@ from typing import Optional, Sequence
 # From #76427 by @ruizanthony.
 _KIMI_K3_SLUG_RE = re.compile(r"(?:^|[^a-z0-9])k3(?:[^a-z0-9]|$)")
 
+# Gemini relay model IDs may encode the thinking tier in the ID.
+_GEMINI_ENCODED_EFFORT_RE = re.compile(r"^gemini-.+-(?:minimal|low|medium|high|xhigh|max)$")
+
 # Canonical low→high ordering for nearest-level clamping. Includes "none" so an explicit
 # disable can be clamped when a provider publishes it as a level. ``ultra`` is Hermes-internal
 # (the Codex product tier): no wire accepts it, every declared set stops at ``max``.
@@ -118,6 +121,12 @@ def kimi_supported_efforts(model: Optional[str]) -> tuple[str, ...]:
     """
     m = (model or "").strip().lower().split("/")[-1]
     return KIMI_K3_EFFORTS if _KIMI_K3_SLUG_RE.search(m) else KIMI_K2_EFFORTS
+
+
+def model_id_encodes_reasoning_effort(model: Optional[str]) -> bool:
+    """Whether a Gemini model ID already selects its thinking tier."""
+    bare = (model or "").strip().lower().rsplit("/", 1)[-1]
+    return bool(_GEMINI_ENCODED_EFFORT_RE.fullmatch(bare))
 
 
 def clamp_effort(

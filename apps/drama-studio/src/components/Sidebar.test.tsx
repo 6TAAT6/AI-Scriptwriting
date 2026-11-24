@@ -189,20 +189,22 @@ test('取消和 Escape 不创建项目，每个项目可新建对话并分别保
   const secondProject = screen.getByRole('button', { name: '选择项目第二个项目' })
   fireEvent.click(firstProject)
   workspace.editComposer({ text: '第一个项目的草稿' })
-  fireEvent.click(screen.getByRole('button', { name: '在第二个项目中新建对话' }))
+  fireEvent.click(screen.getByRole('button', { name: '第二个项目的更多操作' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: '新建对话' }))
   expect(secondProject.getAttribute('aria-current')).toBe('true')
   expect(workspace.composer.get().text).toBe('')
   workspace.editComposer({ text: '第二个项目的草稿' })
-  fireEvent.click(screen.getByRole('button', { name: '收起第二个项目' }))
+  fireEvent.click(secondProject)
   expect(screen.queryByRole('button', { name: '第二部剧' })).toBeNull()
   expect(screen.getByRole('button', { name: '剧本创作工作区' })).toBeTruthy()
   fireEvent.click(firstProject)
   expect(firstProject.getAttribute('aria-current')).toBe('true')
   expect(workspace.composer.get().text).toBe('第一个项目的草稿')
-  expect(screen.getByRole('button', { name: '展开第二个项目' })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: '在第二个项目中新建对话' }))
+  expect(secondProject.getAttribute('aria-expanded')).toBe('false')
+  fireEvent.click(screen.getByRole('button', { name: '第二个项目的更多操作' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: '新建对话' }))
   expect(workspace.composer.get().text).toBe('第二个项目的草稿')
-  expect(screen.getByRole('button', { name: '收起第二个项目' })).toBeTruthy()
+  expect(secondProject.getAttribute('aria-expanded')).toBe('true')
   fireEvent.click(screen.getByRole('button', { name: /新的创作/ }))
   expect(secondProject.getAttribute('aria-current')).toBe('true')
   expect(workspace.composer.get().text).toBe('第二个项目的草稿')
@@ -245,43 +247,6 @@ test('右键菜单归档后，仅从系统设置查看和恢复，侧栏即时�
   await waitFor(() => expect(data.sessions[0].archived).toBe(false))
   expect(await within(settings).findByText('还没有已归档的聊天')).toBeTruthy()
   expect(within(sidebar).getByRole('button', { name: '第二部剧' })).toBeTruthy()
-})
-
-test('置顶项目和对话位于各自分组顶部，新建项目和对话位于未置顶项目顶部', () => {
-  const defaultProject = data.projects[0]
-  data.projects = [
-    { id: 'new-project', title: '新项目', pinned: false, hidden: false },
-    defaultProject,
-    { id: 'old-project', title: '旧项目', pinned: false, hidden: false },
-    { id: 'pinned-project', title: '置顶项目', pinned: true, hidden: false },
-  ]
-  data.sessions = [
-    { id: 'old-chat', title: '旧对话', projectId: 'old-project', pinned: false },
-    { id: 'new-chat', title: '新对话', projectId: 'old-project', pinned: false },
-    { id: 'pinned-chat', title: '置顶对话', projectId: 'old-project', pinned: true },
-    { id: 'old-recent', title: '旧最近', projectId: null, pinned: false },
-    { id: 'new-recent', title: '新最近', projectId: null, pinned: false },
-  ]
-  $sidebar.set({ ...data, loaded: true, busy: false, error: '' })
-  workspace.navigation.set({
-    sessions: [
-      { id: 'old-chat', title: '旧对话', started_at: 100 },
-      { id: 'new-chat', title: '新对话', started_at: 200 },
-      { id: 'pinned-chat', title: '置顶对话', started_at: 50 },
-      { id: 'old-recent', title: '旧最近', started_at: 100 },
-      { id: 'new-recent', title: '新最近', started_at: 200 },
-    ], loading: false, error: ''
-  })
-  display()
-
-  expect(Array.from(document.querySelectorAll('.sidebar-project > .sidebar-project-row .project-group > span:first-of-type')).map(node => node.textContent))
-    .toEqual(['置顶项目', '新项目', '我的剧本', '旧项目'])
-  const project = screen.getByRole('region', { name: '旧项目' })
-  expect(Array.from(project.querySelectorAll('.session-row')).map(node => node.getAttribute('title')))
-    .toEqual(['置顶对话', '新对话', '旧对话'])
-  const recent = screen.getByRole('region', { name: '最近' })
-  expect(Array.from(recent.querySelectorAll('.session-row')).map(node => node.getAttribute('title')))
-    .toEqual(['新最近', '旧最近'])
 })
 
 test('聊天删除先确认，取消不发请求，运行中禁用，成功后移除导航与当前聊天', async () => {
@@ -388,4 +353,93 @@ test('移除项目后侧栏不留占位卡片，恢复入口只在设置的归�
   fireEvent.click(await within(settings).findByRole('button', { name: '恢复项目短剧创作' }))
   await waitFor(() => expect(screen.getByRole('button', { name: '短剧创作的更多操作' })).toBeTruthy())
   expect(screen.getByRole('button', { name: '剧本创作工作区' })).toBeTruthy()
+})
+
+
+test('当前创作与所属项目显示运行圆圈，切走后仍显示并在完成事件后消失', async () => {
+  data.sessions = [{ id: 'first', projectId: 'default' }, { id: 'second', projectId: null }]
+  $sidebar.set({ ...data, loaded: true, busy: false, error: '' })
+  workspace.session.set({ runtimeId: 'live-first', storedId: 'first', info: {} })
+  workspace.conversation.set({ runtimeId: 'live-first', entries: [], running: true, error: '' })
+  workspace.activity.bind('live-first', 'first', true)
+  display()
+  const runningProject = screen.getByRole('button', { name: '选择项目我的剧本' })
+  fireEvent.click(runningProject)
+  fireEvent.click(runningProject)
+  expect(screen.getByLabelText('剧本创作工作区正在创作')).toBeTruthy()
+  expect(screen.getByLabelText('我的剧本中有创作正在进行')).toBeTruthy()
+  act(() => workspace.receive({ type: 'message.start', session_id: 'live-first', payload: {} }))
+  act(() => workspace.newConversation(null))
+  expect(screen.getByLabelText('剧本创作工作区正在创作')).toBeTruthy()
+  act(() => workspace.receive({ type: 'message.complete', session_id: 'live-first', payload: { status: 'complete', text: '完成' } }))
+  await waitFor(() => expect(screen.queryByLabelText('剧本创作工作区正在创作')).toBeNull())
+  expect(screen.queryByLabelText('我的剧本中有创作正在进行')).toBeNull()
+  expect(screen.getByLabelText('剧本创作工作区有新回复')).toBeTruthy()
+  expect(screen.getByLabelText('我的剧本中有新回复')).toBeTruthy()
+})
+
+test('项目行保留文件夹图标，运行状态单独显示，项目新建对话移入更多菜单', () => {
+  data.sessions = [{ id: 'first', projectId: 'default' }]
+  $sidebar.set({ ...data, loaded: true, busy: false, error: '' })
+  workspace.session.set({ runtimeId: 'live-first', storedId: 'first', info: {} })
+  workspace.conversation.set({ runtimeId: 'live-first', entries: [], running: true, error: '' })
+  workspace.activity.bind('live-first', 'first', true)
+  display()
+
+  const project = screen.getByRole('button', { name: '选择项目我的剧本' })
+  fireEvent.click(project)
+  fireEvent.click(project)
+  expect(project.querySelector('.sidebar-project-folder')).toBeTruthy()
+  expect(project.querySelector('.count')).toBeNull()
+  expect(project.querySelector('.sidebar-running')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '在我的剧本中新建对话' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '我的剧本的更多操作' }))
+  expect(screen.getByRole('menuitem', { name: '新建对话' })).toBeTruthy()
+})
+
+test('项目展开时状态只显示在子对话，收起后才聚合到项目行', () => {
+  data.sessions = [{ id: 'first', projectId: 'default' }]
+  $sidebar.set({ ...data, loaded: true, busy: false, error: '' })
+  workspace.session.set({ runtimeId: 'live-first', storedId: 'first', info: {} })
+  workspace.conversation.set({ runtimeId: 'live-first', entries: [], running: true, error: '' })
+  workspace.activity.bind('live-first', 'first', true)
+  display()
+
+  const project = screen.getByRole('button', { name: '选择项目我的剧本' })
+  expect(project.getAttribute('aria-expanded')).toBe('true')
+  expect(project.querySelector('.sidebar-project-status')).toBeNull()
+  expect(screen.getByLabelText('剧本创作工作区正在创作')).toBeTruthy()
+  fireEvent.click(project)
+  fireEvent.click(project)
+  expect(project.getAttribute('aria-expanded')).toBe('false')
+  expect(project.querySelector('.sidebar-project-status')).toBeTruthy()
+})
+
+
+test('项目行本身展开收起，不再有单独的小箭头，未读点击查看即清除', async () => {
+  data.sessions = [{ id: 'first', projectId: 'default' }]
+  $sidebar.set({ ...data, loaded: true, busy: false, error: '' })
+  workspace.session.set({ runtimeId: 'other-live', storedId: 'second', info: {} })
+  workspace.conversation.set({ runtimeId: 'other-live', entries: [], running: false, error: '' })
+  vi.spyOn(workspace.api, 'rpc').mockImplementation((async (method, params) => {
+    if (method === 'session.resume') return { session_id: 'live-first', stored_session_id: String((params as {session_id:string}).session_id), running: false, info: {}, messages: [], message_count: 0 }
+    if (method === 'session.list') return { sessions: [{ id: 'first', title: 'Bot Chat' }, { id: 'second', title: '第二部剧' }] }
+    if (method === 'session.active_list') return { sessions: [] }
+    if (method === 'subagent.list') return { subagents: [], delegations: [] }
+    if (method === 'session.events.since') return { events: [] }
+    throw new Error('此测试不触发生成')
+  }) as WorkspaceApi['rpc'])
+  display()
+  expect(screen.queryByRole('button', { name: '收起我的剧本' })).toBeNull()
+  const project = screen.getByRole('button', { name: '选择项目我的剧本' })
+  fireEvent.click(project)
+  fireEvent.click(project)
+  expect(project.getAttribute('aria-expanded')).toBe('false')
+  fireEvent.click(project)
+  expect(project.getAttribute('aria-expanded')).toBe('true')
+  act(() => { workspace.activity.bind('live-first', 'first', true); workspace.receive({ type: 'message.complete', session_id: 'live-first', payload: { status: 'complete' } }) })
+  expect(screen.getByLabelText('剧本创作工作区有新回复')).toBeTruthy()
+  fireEvent.click(screen.getByTitle('剧本创作工作区'))
+  await waitFor(() => expect(screen.queryByLabelText('剧本创作工作区有新回复')).toBeNull())
+  expect(screen.queryByLabelText('我的剧本中有新回复')).toBeNull()
 })

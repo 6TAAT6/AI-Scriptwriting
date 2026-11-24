@@ -22,7 +22,7 @@ async function fixture(t) {
   const native = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost')
     res.setHeader('Content-Type', 'application/json')
-    if (url.pathname === '/api/studio/model-endpoints') return res.end(JSON.stringify({ endpoints: [{ id: 'private-vendor', name: '供应商真实名称', is_current: true, models: rawCatalog.providers[0].models, image_models: rawCatalog.providers[0].image_models }, { id: 'a', name: '短名称接入', models: ['a'] }] }))
+    if (url.pathname === '/api/studio/model-endpoints') return res.end(JSON.stringify({ endpoints: [{ id: 'private-vendor', name: '供应商真实名称', is_current: true, models: rawCatalog.providers[0].models, image_models: rawCatalog.providers[0].image_models }, { id: 'a', name: '短名称接入', models: ['a'] }, { id: 'paused-vendor', name: '已停用接入', enabled: false, models: ['gpt-6.1-sol', 'paused-only-model'] }] }))
     if (url.pathname === '/api/studio/image-selection') {
       const chunks = []; for await (const chunk of req) chunks.push(chunk)
       imageSelections.push(JSON.parse(Buffer.concat(chunks).toString()))
@@ -117,6 +117,20 @@ test('模型名称仅 root 可修改，新增模型自动纳入并在重启后�
   assert.equal(restored.data.models.find(row => row.model === 'gpt-6.1-sol').display_name, '团队精品模型')
   assert.ok((await readFile(path.join(f.directory, 'model-display-names.json'), 'utf8')).includes('团队精品模型'))
   assert.equal(f.calls.length, 0)
+})
+
+test('停用的接入不进入可选目录，也不让同名模型变成多接入；可见入口绑定停用接入时拒绝保存', async t => {
+  const f = await fixture(t), root = await f.login('root')
+  const initial = await f.request('/studio/admin/model-names', root)
+  assert.equal(initial.status, 200)
+  assert.equal(initial.data.targets.some(row => row.provider === 'paused-vendor'), false)
+  assert.deepEqual(initial.data.disabled_targets, [{ provider: 'paused-vendor', provider_name: '已停用接入' }])
+  assert.equal(initial.data.models.find(row => row.model === 'gpt-6.1-sol').provider, 'private-vendor')
+  const bound = initial.data.models.map(row => row.model === 'gpt-6.1-sol' ? { ...row, provider: 'paused-vendor', model: 'paused-only-model' } : row)
+  const rejected = await f.request('/studio/admin/model-names', root, { models: bound })
+  assert.equal(rejected.status, 400)
+  assert.match(rejected.data.error, /已停用/)
+  assert.deepEqual((await f.request('/studio/admin/model-names', root)).data.models, initial.data.models)
 })
 
 test('管理员和员工只得到公开模型标识，文字和生图选择可还原真实路由，隐藏旧会话继续保留显示名', async t => {
