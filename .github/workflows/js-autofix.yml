@@ -45,6 +45,7 @@ on:
       - '**/*.tsx'
       - 'package.json'
       - 'package-lock.json'
+      - '.github/workflows/js-autofix.yml'
   workflow_dispatch:
 
 permissions:
