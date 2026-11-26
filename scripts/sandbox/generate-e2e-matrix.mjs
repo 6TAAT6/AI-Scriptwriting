@@ -529,9 +529,14 @@ async function main() {
       artifacts: { type: 'string' },
     },
   });
+  // A fork or a pre-release checkout may have no sampled release tags. The
+  // HEAD -> NEXT column is still a complete current-version install/update
+  // check, and the report job must remain able to render that run even when a
+  // failed dependency leaves the output blank.
+  const rawTags = values.tags?.trim() || '[]';
   if (values.format === 'results') {
     const jobs = (await readStdin()).split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l));
-    const annotations = /** @type {TagAnnotation[]} */ (JSON.parse(values.tags));
+    const annotations = /** @type {TagAnnotation[]} */ (JSON.parse(rawTags));
     /** @type {Map<string, number>} */
     const artifactById = new Map();
     if (values.artifacts) {
@@ -544,7 +549,7 @@ async function main() {
     process.stdout.write(renderMarkdownResults(jobs, annotations, artifactById));
     return;
   }
-  const tags = /** @type {TagAnnotation[]} */ (JSON.parse(values.tags));
+  const tags = /** @type {TagAnnotation[]} */ (JSON.parse(rawTags));
   const envs = generateEnvironments(SPEC);
   if (values.format === 'markdown') {
     process.stdout.write(renderMarkdownPlan(envs, tags));

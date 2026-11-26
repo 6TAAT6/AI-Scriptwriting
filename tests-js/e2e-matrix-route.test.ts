@@ -16,6 +16,10 @@ function generate(route: string): Matrices {
   return JSON.parse(execFileSync(process.execPath, [script, '--tags', TAGS, '--route', route], { encoding: 'utf8' })) as Matrices
 }
 
+function generateWithTags(tags: string, route = 'all'): Matrices {
+  return JSON.parse(execFileSync(process.execPath, [script, '--tags', tags, '--route', route], { encoding: 'utf8' })) as Matrices
+}
+
 function legNames(matrices: Matrices): string[] {
   return Object.values(matrices).flatMap(m => m.include.map(leg => leg.name))
 }
@@ -52,4 +56,30 @@ test('the pr route runs one script install updated by hermes update per OS start
     'macos: installer-script -> hermes-update (v2026.6.19 -> HEAD)',
     'windows: installer-script -> hermes-update (HEAD -> NEXT)',
   ])
+})
+
+test('an empty release-tag sample keeps the current HEAD -> NEXT legs', () => {
+  const matrices = generateWithTags('[]')
+
+  expect(legNames(matrices)).toContain('linux: installer-script -> hermes-update (HEAD -> NEXT)')
+  expect(legNames(matrices)).toContain('windows: installer-script -> hermes-update (HEAD -> NEXT)')
+  expect(legNames(matrices)).toContain('macos: installer-script -> hermes-update (HEAD -> NEXT)')
+  expect(legNames(matrices).some(name => name.includes('v2026.6.19'))).toBe(false)
+})
+
+test('the PR subset keeps current HEAD -> NEXT coverage without a release baseline', () => {
+  expect(legNames(generateWithTags('[]', 'pr')).sort()).toEqual([
+    'linux: installer-script -> hermes-update (HEAD -> NEXT)',
+    'windows: installer-script -> hermes-update (HEAD -> NEXT)',
+  ])
+})
+
+test('the results renderer accepts a blank tag output from a failed prerequisite', () => {
+  const output = execFileSync(
+    process.execPath,
+    [script, '--format', 'results', '--tags', ''],
+    { input: '', encoding: 'utf8' },
+  )
+
+  expect(output).toContain('(no legs found in this run)')
 })

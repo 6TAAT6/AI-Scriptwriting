@@ -212,7 +212,11 @@ jobs:
           elif [ "$RELEASE_MODE" = true ]; then
             tags="$(python3 -m scripts.releases.pick_tags --count "$TAG_COUNT" --exclude-ref "$EXCLUDE_REF")"
           else
-            tags="$(scripts/sandbox/pick-release-tags.sh --count "$TAG_COUNT")"
+            # Forks and pre-release repositories may not publish vYYYY.M.D
+            # tags yet. Keep their scheduled/PR check green while retaining
+            # the HEAD -> NEXT coverage. Stable-release calls take the branch
+            # above and must still fail when no released baseline exists.
+            tags="$(scripts/sandbox/pick-release-tags.sh --count "$TAG_COUNT" --allow-empty)"
           fi
           echo "Testing updates from: $tags"
           # Annotate each tag with what its own tree supports, so run
